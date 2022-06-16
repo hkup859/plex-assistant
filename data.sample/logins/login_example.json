@@ -1,0 +1,5 @@
+{
+    "email": "encrypted_email_text",
+    "password": "encrypted_password_text",
+    "pin": "encrypted_pin_text"
+}

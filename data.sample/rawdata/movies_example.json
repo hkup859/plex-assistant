@@ -1,0 +1,5 @@
+{
+    "type": "Movies",
+    "data": ["html_string", "html_string2"],
+    "updatedAt": "2000-01-01T00:00:00.000Z"
+}
