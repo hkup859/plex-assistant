@@ -74,68 +74,89 @@ export const retrieveLogin = async (label: string): Promise<any> => { // Add aut
 
 export const logInToPlex = async (browser: any, userLabel: string): Promise<any> => { // TODO use page & browser types
     console.log("In logInToPlex")
-
-    console.log("Pulling Login Credentials")
-    const loginCredentials = await retrieveLogin(userLabel)
-
-    console.log("Creating new Page")
-    const page = await browser.newPage();
-    await page.setViewport({width: 1920, height: 1080})
-
-    // Load Plex
-    await page.goto('https://app.plex.tv/desktop/#!/')
-
-    // Close streaming popup if it exists
+    let page
     try {
-      console.log("Closing streaming popup if it exists")
-      await page.waitForSelector('[aria-label="Close Streaming Services modal"]', {timeout: pageTimeout})
-      await page.click('[aria-label="Close Streaming Services modal"]')
+      console.log("Pulling Login Credentials")
+      const loginCredentials = await retrieveLogin(userLabel)
+  
+      console.log("Creating new Page")
+      page = await browser.newPage();
+      await page.setViewport({width: 1920, height: 1080})
+  
+      // Load Plex
+      await page.goto('https://app.plex.tv/desktop/#!/')
+  
+      // Close streaming popup if it exists
+      try {
+        console.log("Closing streaming popup if it exists")
+        await page.waitForSelector('[aria-label="Close Streaming Services modal"]', {timeout: pageTimeout})
+        await page.click('[aria-label="Close Streaming Services modal"]')
+      } catch (err) {
+        console.log("Caught Streaming Popup Error: ", err.message)
+      }
+  
+      // Click sign in button on main page
+      console.log("Locating Sign In")
+      await page.waitForSelector('[data-testid=signInButton]', {timeout: pageTimeout}).catch((err: { message: any }) => console.log(`Sign In Button Error: ${err.message}`)) // TODO - should this be caught?
+      // TODO - Uneeded? - // await page.waitForFrame(async (frame) => { return frame.name() === 'iFrameResizer0'}, {timeout: 30000}).catch((err) => console.log(`iFrame Error:: ${err.message}`))
+      await page.click('[data-testid=signInButton]').catch((err: { message: any }) => console.log("Sign In Button Error 2: ", err.message)) // TODO - should this be caught?
+  
+      // Complete first login button
+      console.log("Entering Credentials")
+      console.log("Waiting for iFrame")
+      let frame
+      try {
+        frame = await page.waitForFrame(async (frame: any) => { return frame.name() === 'iFrameResizer0'})
+      } catch(err) {
+        console.log("Failed to wait for iFrame. Searching existing frames now")
+        const frames = await page.frames()
+        console.log("FRAMES: ", frames)
+        frame = frames.find((frame: any) => frame.name() === 'iFrameResizer0')
+      }
+      if(!frame) {
+        throw new Error("Unable to find the login iFrame")
+      }
+      console.log("Waiting for sign in option")
+      await frame.waitForSelector('[data-testid=signIn--email]', {timeout: pageTimeout}).catch((err: { message: any }) => console.log(`Email Sign In Option Error: ${err.message}`)) // TODO - should this be caught?
+      await frame.waitForTimeout(1000) // TODO - resolved error waiting for #email by waiting just a little longer for the page to load enough to actually click the button. Need to implement this everywhere as a precaution. Alternatively the troubleshooting/retry logic could fix it.
+      await frame.click('[data-testid=signIn--email]')
+      console.log("Waiting for email textbox")
+      await frame.waitForSelector('#email')
+      await frame.type('#email', loginCredentials.email)
+      await frame.type('#password', loginCredentials.password)
+      console.log("Submitting Credentials")
+      await frame.click('[data-uid=id-7]') // TODO - Update this to a more defined metric
+  
+      // Complete second login screen - TODO split this to own function. Opening new pages will require pin but not full login.
+      console.log("Selecting User Profile")
+      await page.waitForSelector('.admin-icon')
+      await page.click('.admin-icon')
+      
+      if (loginCredentials.pin) {
+        console.log("PIN Detected. Entering PIN Data.")
+        // await page.waitForSelector('.pin-digit-container') // Is this redundant?
+        await page.waitForSelector('.pin-digit,current', {timeout: pageTimeout}).catch((err: { message: any }) => console.log(`Pin Selector Error: ${err.message}`)) // TODO - should this be caught?
+        await page.type('.pin-digit,current', loginCredentials.pin.substr(0, 1))
+        await page.waitForTimeout(1000)
+        await page.type('.pin-digit,current', loginCredentials.pin.substr(1, 1))
+        await page.waitForTimeout(1000)
+        await page.type('.pin-digit,current', loginCredentials.pin.substr(2, 1))
+        await page.waitForTimeout(1000)
+        await page.type('.pin-digit,current', loginCredentials.pin.substr(3, 1))
+      }
+  
+      // TODO - Add a wait for selector here. Something that identifies we are on the next page. Maybe a waitForNavigation?
+      
+      return page
     } catch (err) {
-      console.log("Caught Streaming Popup Error: ", err.message)
+      console.log(`Failed to login: ${err}`)
+      if (page) {
+        return page
+      } else {
+        throw err
+      }
     }
-
-    // Click sign in button on main page
-    console.log("Locating Sign In")
-    await page.waitForSelector('[data-testid=signInButton]', {timeout: pageTimeout}).catch((err) => console.log(`Sign In Button Error: ${err.message}`)) // TODO - should this be caught?
-    // Uneeded? - // await page.waitForFrame(async (frame) => { return frame.name() === 'iFrameResizer0'}, {timeout: 30000}).catch((err) => console.log(`iFrame Error:: ${err.message}`))
-    await page.click('[data-testid=signInButton]').catch((err) => console.log("Sign In Button Error 2: ", err.message)) // TODO - should this be caught?
-
-    // Complete first login button
-    console.log("Entering Credentials")
-    console.log("Waiting for iFrame")
-    const frame = await page.waitForFrame(async (frame: any) => { return frame.name() === 'iFrameResizer0'})
-    console.log("Waiting for sign in option")
-    await frame.waitForSelector('[data-testid=signIn--email]', {timeout: pageTimeout}).catch((err) => console.log(`Email Sign In Option Error: ${err.message}`)) // TODO - should this be caught?
-    await frame.waitForTimeout(1000) // TODO - resolved error waiting for #email by waiting just a little longer for the page to load enough to actually click the button. Need to implement this everywhere as a precaution. Alternatively the troubleshooting/retry logic could fix it.
-    await frame.click('[data-testid=signIn--email]')
-    console.log("Waiting for email textbox")
-    await frame.waitForSelector('#email')
-    await frame.type('#email', loginCredentials.email)
-    await frame.type('#password', loginCredentials.password)
-    console.log("Submitting Credentials")
-    await frame.click('[data-uid=id-7]') // TODO - Update this to a more defined metric
-
-    // Complete second login screen
-    console.log("Selecting User Profile")
-    await page.waitForSelector('.admin-icon')
-    await page.click('.admin-icon')
     
-    if (loginCredentials.pin) {
-      console.log("PIN Detected. Entering PIN Data.")
-      // await page.waitForSelector('.pin-digit-container') // Is this redundant?
-      await page.waitForSelector('.pin-digit,current', {timeout: pageTimeout}).catch((err) => console.log(`Pin Selector Error: ${err.message}`)) // TODO - should this be caught?
-      await page.type('.pin-digit,current', loginCredentials.pin.substr(0, 1))
-      await page.waitForTimeout(1000)
-      await page.type('.pin-digit,current', loginCredentials.pin.substr(1, 1))
-      await page.waitForTimeout(1000)
-      await page.type('.pin-digit,current', loginCredentials.pin.substr(2, 1))
-      await page.waitForTimeout(1000)
-      await page.type('.pin-digit,current', loginCredentials.pin.substr(3, 1))
-    }
-
-    // TODO - Add a wait for selector here. Something that identifies we are on the next page. Maybe a waitForNavigation?
-    
-    return page
 }
 
 export const navigateToLiveTVPage = async (page: any): Promise<any> => { // TODO use page type
@@ -311,7 +332,7 @@ const saveRawItems = async (items: any[], type: string): Promise<void> => { // T
       data: items,
       updatedAt: new Date()
     }
-    fs.writeFileSync(savePath, JSON.stringify(fullFile)) // TODO - Need to handle potential error here
+    fs.writeFileSync(savePath, JSON.stringify(fullFile)) // TODO - Need to handle potential error here. TODO - This failed but the file was also updated??? Need to verify data was updated or just go ahead and switch to DB.
   }
 }
 
