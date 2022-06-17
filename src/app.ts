@@ -2,7 +2,7 @@ import express from 'express'
 import puppeteer from 'puppeteer'
 import bodyParser from 'body-parser'
 import dotenv from 'dotenv'
-import { logInToPlex, navigateToLiveTVPage, grabAndSaveScreenItems, selectMediaType, saveLogin, retrieveLogin, encrypt, decrypt } from './controllers/rawdata'
+import { logInToPlex, navigateToLiveTVPage, grabAndSaveScreenItems, selectMediaType, saveLogin, retrieveLogin, retrieveRawItems } from './controllers/rawdata'
 
 // Allow pulling ENV variable from .env file
 dotenv.config()
@@ -18,11 +18,22 @@ app.use(bodyParser.urlencoded())
 app.use(bodyParser.json())
 
 
-app.get('/', (req: express.Request, res: express.Response) => {
-	res.json({
-		message: 'Hello world',
-	})
-})
+// app.get('/', (req: express.Request, res: express.Response) => {
+// 	res.json({
+// 		message: 'Hello world',
+// 	})
+// })
+
+
+// TODO - Figure out a better way to handle this. Also try to upgrade typescript to v4.0.0 or higher.
+// interface ApiError {
+// 	code: number;
+// 	message: string;
+//   }
+
+// const isApiError = (x: any): x is ApiError => {
+// return typeof x.code === 'number';
+// };
 
 app.post('/saveLogin', async (req: express.Request, res: express.Response) => {
 	console.log("In saveLogin")
@@ -32,7 +43,7 @@ app.post('/saveLogin', async (req: express.Request, res: express.Response) => {
 		const response = await saveLogin(label, email, password, pin)
 		return res.status(200).json(response)
 	} catch(err) {
-		return res.status(500).json(err.message)
+		return res.status(500).json(`saveLogin failed: ${err}`)
 	}
 })
 
@@ -44,7 +55,7 @@ app.post('/retrieveLogin', async (req: express.Request, res: express.Response) =
 		const response = await retrieveLogin(label)
 		return res.status(200).json(response)
 	} catch(err) {
-		return res.status(500).json(err.message)
+		return res.status(500).json(`retrieveLogin failed: ${err}`)
 	}
 })
 
@@ -82,10 +93,30 @@ app.get('/pullRawData', async (req: express.Request, res: express.Response) => {
 
 		return res.json(`Successfully saved raw screen data for media type: ${mediaType}`)
 	} catch(err) {
-		console.log(`pullRawData failed: ${err.message}`)
+		console.log(`pullRawData failed: ${err}`)
 		console.log("Closing browser")
-		await browser.close().catch(err => console.log("Browser close failure. Browser was never opened."))
+		if (browser) 
+			await browser.close().catch(() => console.log("Browser close failure. Browser was never opened."))
 		return res.status(500).json(`pullRawData failed: ${err}`)
+	}
+	
+})
+
+app.get('/retrieveRawData', async (req: express.Request, res: express.Response) => {
+	console.log("In retrieveRawData")
+	try {
+		// Pull variables from query
+		// TODO - object desctructing?
+		const mediaType: string = req.query?.mediaType as string // TODO - use enum type
+
+		if (!mediaType) {
+			return res.status(500).json("mediaType is a required field")
+		}
+
+		const rawItems = await retrieveRawItems(mediaType)
+		return res.json(rawItems)
+	} catch(err) {
+		return res.status(500).json(`retrieveRawData failed: ${err}`)
 	}
 	
 })

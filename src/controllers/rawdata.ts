@@ -1,30 +1,38 @@
-import fs from 'fs' 
+import fs from 'fs'  
+import dotenv from 'dotenv'
+
+// Allow pulling ENV variable from .env file
+dotenv.config()
 
 const pageTimeout = process.env["PAGE_TIMEOUT"]
 const dvrSections = ["Episodes", "Movies", "Shows", "Sports", "News"]
 
+//Checking the crypto module
 const crypto = require('crypto');
 const algorithm = 'aes-256-cbc'; //Using AES encryption
-const secretKey = process.env['ENCRYPTION_SECRET_KEY']
+const key = crypto.scryptSync(process.env['ENCRYPTION_SECRET_KEY'], process.env['ENCRYPTION_KEY_SALT'], 32)
+const iv = crypto.scryptSync(process.env['ENCRYPTION_IV'], process.env['ENCRYPTION_IV_SALT'], 16)
 
-//Encrypt Data
-export function encrypt(text) {
-  let cipher = crypto.createCipher(algorithm, secretKey);
-  let encryptedString = cipher.update(text, 'utf8', 'hex')
-  encryptedString += cipher.final('hex');
-  return encryptedString
+//Encrypting text
+const encrypt = (text: string): any => {
+   let cipher = crypto.createCipheriv(algorithm, Buffer.from(key), iv); // Does key need to be buffer?
+   let encrypted = cipher.update(text);
+   encrypted = Buffer.concat([encrypted, cipher.final()]);
+   return { iv: iv.toString('hex'), encryptedData: encrypted.toString('hex') };
 }
 
-// Decrypt Data
-export function decrypt(text) {
-  let decipher = crypto.createDecipher(algorithm, secretKey);
-  let decryptedString = decipher.update(text, 'hex', 'utf8')
-  decryptedString += decipher.final('utf8');
-  return decryptedString
+// Decrypting text
+const decrypt = (encryptedData: any): string => {
+   let iv = Buffer.from(encryptedData.iv, 'hex');
+   let encryptedText = Buffer.from(encryptedData.encryptedData, 'hex');
+   let decipher = crypto.createDecipheriv(algorithm, Buffer.from(key), iv); // Does key need to be buffer?
+   let decrypted = decipher.update(encryptedText);
+   decrypted = Buffer.concat([decrypted, decipher.final()]);
+   return decrypted.toString();
 }
 
 // Access Logins
-export const saveLogin = async (label, email, password, pin) => {
+export const saveLogin = async (label: string, email: string, password: string, pin: string): Promise<string> => {
   console.log("In saveLogin")
   try {
     const encryptedLogin = {
@@ -45,7 +53,7 @@ export const saveLogin = async (label, email, password, pin) => {
   
 }
 
-export const retrieveLogin = async (label) => { // Add authentication to retrieve data. Maybe with a quick password saved alongside the data? Or just general api authentication.
+export const retrieveLogin = async (label: string): Promise<any> => { // Add authentication to retrieve data. Maybe with a quick password saved alongside the data? Or just general api authentication.
   console.log("In retrieveLogin")
   try {
     // const savePath = `../../data/logins/${label}.json` // Should work, why is fs starting at root project level?????
@@ -88,16 +96,17 @@ export const logInToPlex = async (browser: any, userLabel: string): Promise<any>
 
     // Click sign in button on main page
     console.log("Locating Sign In")
-    await page.waitForSelector('[data-testid=signInButton]', {timeout: pageTimeout}).catch(err => console.log(`Sign In Button Error: ${err.message}`)) // TODO - should this be caught?
-    // Uneeded? - // await page.waitForFrame(async (frame) => { return frame.name() === 'iFrameResizer0'}, {timeout: 30000}).catch(err => console.log(`iFrame Error:: ${err.message}`))
-    await page.click('[data-testid=signInButton]').catch(err => console.log("Sign In Button Error 2: ", err.message)) // TODO - should this be caught?
+    await page.waitForSelector('[data-testid=signInButton]', {timeout: pageTimeout}).catch((err) => console.log(`Sign In Button Error: ${err.message}`)) // TODO - should this be caught?
+    // Uneeded? - // await page.waitForFrame(async (frame) => { return frame.name() === 'iFrameResizer0'}, {timeout: 30000}).catch((err) => console.log(`iFrame Error:: ${err.message}`))
+    await page.click('[data-testid=signInButton]').catch((err) => console.log("Sign In Button Error 2: ", err.message)) // TODO - should this be caught?
 
     // Complete first login button
     console.log("Entering Credentials")
     console.log("Waiting for iFrame")
-    const frame = await page.waitForFrame(async (frame) => { return frame.name() === 'iFrameResizer0'})
+    const frame = await page.waitForFrame(async (frame: any) => { return frame.name() === 'iFrameResizer0'})
     console.log("Waiting for sign in option")
-    await frame.waitForSelector('[data-testid=signIn--email]', {timeout: pageTimeout}).catch(err => console.log(`Email Sign In Option Error: ${err.message}`)) // TODO - should this be caught?
+    await frame.waitForSelector('[data-testid=signIn--email]', {timeout: pageTimeout}).catch((err) => console.log(`Email Sign In Option Error: ${err.message}`)) // TODO - should this be caught?
+    await frame.waitForTimeout(1000) // TODO - resolved error waiting for #email by waiting just a little longer for the page to load enough to actually click the button. Need to implement this everywhere as a precaution. Alternatively the troubleshooting/retry logic could fix it.
     await frame.click('[data-testid=signIn--email]')
     console.log("Waiting for email textbox")
     await frame.waitForSelector('#email')
@@ -114,7 +123,7 @@ export const logInToPlex = async (browser: any, userLabel: string): Promise<any>
     if (loginCredentials.pin) {
       console.log("PIN Detected. Entering PIN Data.")
       // await page.waitForSelector('.pin-digit-container') // Is this redundant?
-      await page.waitForSelector('.pin-digit,current', {timeout: pageTimeout}).catch(err => console.log(`Pin Selector Error: ${err.message}`)) // TODO - should this be caught?
+      await page.waitForSelector('.pin-digit,current', {timeout: pageTimeout}).catch((err) => console.log(`Pin Selector Error: ${err.message}`)) // TODO - should this be caught?
       await page.type('.pin-digit,current', loginCredentials.pin.substr(0, 1))
       await page.waitForTimeout(1000)
       await page.type('.pin-digit,current', loginCredentials.pin.substr(1, 1))
@@ -153,7 +162,7 @@ export const navigateToLiveTVPage = async (page: any): Promise<any> => { // TODO
   return page
 }
 
-const getTextContent = async (property: any) => { // TODO - use property type
+const getTextContent = async (property: any): Promise<string> => { // TODO - use property type
   return await (await property.getProperty('textContent')).jsonValue()
 }
 
@@ -202,9 +211,9 @@ const findPropertyByTextContent = async (properties: any, searchText: any): Prom
   }
 }
 
-const grabAllScreenItems = async (page): Promise<any[]> => { // TODO - use page type
+const grabAllScreenItems = async (page: any): Promise<any[]> => { // TODO - use page type
   let noNewItemsCount = 0
-  let allItems = []
+  let allItems: any[] = []
 
   // Align mouse & focus on page
   const mouse = await page.mouse
@@ -229,8 +238,8 @@ const grabAllScreenItems = async (page): Promise<any[]> => { // TODO - use page 
   return allItems
 }
 
-const grabCurrentScreenItems = async (page, allItems): Promise<any> => { // TODO - use page & allItems types
-  const finalItemList = []
+const grabCurrentScreenItems = async (page: any, allItems: any[]): Promise<any> => { // TODO - use page & allItems types
+  const finalItemList: any[] = []
   const currentItems = await page.$$('[data-testid=cellItem]')
   let foundNewItem = false
 
@@ -266,9 +275,10 @@ const grabCurrentScreenItems = async (page, allItems): Promise<any> => { // TODO
 }
 
 // FS CRUD
-const saveRawItems = async (items, type): Promise<void> => { // TODO - use items & type types
+const saveRawItems = async (items: any[], type: string): Promise<void> => { // TODO - use items & type types
   console.log("Saving Raw Items")
-  const savePath = `../../data/rawdata/${type}.json`
+  const savePath = `./data/rawdata/${type}.json`
+  // const savePath = `../../data/rawdata/${type}.json`
   
   // If this rawdata type exists, add non-duplicate items to file
   try {
@@ -301,6 +311,17 @@ const saveRawItems = async (items, type): Promise<void> => { // TODO - use items
       data: items,
       updatedAt: new Date()
     }
-    fs.writeFileSync(savePath, JSON.stringify(fullFile))
+    fs.writeFileSync(savePath, JSON.stringify(fullFile)) // TODO - Need to handle potential error here
+  }
+}
+
+export const retrieveRawItems = async (type: string): Promise<any> => {
+  const path = `./data/rawdata/${type}.json`
+  try {
+    const rawDataFileBuffer = fs.readFileSync(path)
+    const rawDataFile = JSON.parse(rawDataFileBuffer.toString())
+    return rawDataFile
+  } catch(err) {
+    console.log(`Failed to retrieve raw items. There may be no items for type: ${type}`)
   }
 }
