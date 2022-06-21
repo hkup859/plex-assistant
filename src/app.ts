@@ -2,7 +2,7 @@ import express from 'express'
 import puppeteer from 'puppeteer'
 import bodyParser from 'body-parser'
 import dotenv from 'dotenv'
-import { logInToPlex, navigateToLiveTVPage, grabAndSaveScreenItems, selectMediaType, saveLogin, retrieveLogin, retrieveRawItems } from './controllers/rawdata'
+import { logInToPlex, navigateToLiveTVPage, grabAndSaveScreenItems, selectMediaType, saveLogin, retrieveLogin, retrieveRawItems, extractMediaDetails } from './controllers/rawdata'
 
 // Allow pulling ENV variable from .env file
 dotenv.config()
@@ -119,6 +119,35 @@ app.get('/retrieveRawData', async (req: express.Request, res: express.Response) 
 		return res.status(500).json(`retrieveRawData failed: ${err}`)
 	}
 	
+})
+
+app.get('/extractMediaDetails', async (req: express.Request, res: express.Response) => {
+	console.log("In extractMediaDetails")
+	let browser
+	try {
+		const mediaType: string = req.query?.mediaType as string // TODO - use enum type
+		const headless: boolean = (req.query?.headless as string) !== 'false' // TODO - use enum type
+		const userLabel: string = req.query?.userLabel as string
+		browser = await puppeteer.launch({
+			headless,
+			// args: ['--start-fullscreen'],
+			// slowMo: 500
+		})
+		
+		const page = await logInToPlex(browser, userLabel)
+		const response = await extractMediaDetails(mediaType, page)
+		console.log("Closing browser")
+		if (browser) 
+			await browser.close().catch(() => console.log("Browser close failure. Browser was never opened."))
+		
+		// const response = await saveLogin(label, email, password, pin)
+		return res.status(200).json(response)
+	} catch(err) {
+		console.log("Closing browser")
+		if (browser) 
+			await browser.close().catch(() => console.log("Browser close failure. Browser was never opened."))
+		return res.status(500).json(`saveLogin failed: ${err}`)
+	}
 })
 
 app.listen(port, () => console.log(`plex-assistant server listening on port ${port}!`))

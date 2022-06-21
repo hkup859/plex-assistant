@@ -72,6 +72,8 @@ export const retrieveLogin = async (label: string): Promise<any> => { // Add aut
   }
 }
 
+// Takes a browser & userLabel (plex authentication)
+// Creates a new plex page and either logs in from scratch or via pin.
 export const logInToPlex = async (browser: any, userLabel: string): Promise<any> => { // TODO use page & browser types
     console.log("In logInToPlex")
     let page
@@ -84,52 +86,75 @@ export const logInToPlex = async (browser: any, userLabel: string): Promise<any>
       await page.setViewport({width: 1920, height: 1080})
   
       // Load Plex
-      await page.goto('https://app.plex.tv/desktop/#!/')
+      // await page.goto('https://app.plex.tv/desktop/#!/')
+      await page.goto('https://www.plex.tv/sign-in/?forward=https://www.plex.tv/')
+      
+      // // Close streaming popup if it exists
+      // try {
+      //   console.log("Closing streaming popup if it exists")
+      //   await page.waitForSelector('[aria-label="Close Streaming Services modal"]', {timeout: pageTimeout})
+      //   await page.click('[aria-label="Close Streaming Services modal"]')
+      // } catch (err) {
+      //   console.log("Caught Streaming Popup Error: ", err.message)
+      // }
   
-      // Close streaming popup if it exists
-      try {
-        console.log("Closing streaming popup if it exists")
-        await page.waitForSelector('[aria-label="Close Streaming Services modal"]', {timeout: pageTimeout})
-        await page.click('[aria-label="Close Streaming Services modal"]')
-      } catch (err) {
-        console.log("Caught Streaming Popup Error: ", err.message)
-      }
-  
-      // Click sign in button on main page
-      console.log("Locating Sign In")
-      await page.waitForSelector('[data-testid=signInButton]', {timeout: pageTimeout}).catch((err: { message: any }) => console.log(`Sign In Button Error: ${err.message}`)) // TODO - should this be caught?
-      // TODO - Uneeded? - // await page.waitForFrame(async (frame) => { return frame.name() === 'iFrameResizer0'}, {timeout: 30000}).catch((err) => console.log(`iFrame Error:: ${err.message}`))
-      await page.click('[data-testid=signInButton]').catch((err: { message: any }) => console.log("Sign In Button Error 2: ", err.message)) // TODO - should this be caught?
-  
+      // // Click sign in button on main page
+      // console.log("Locating Sign In")
+      // await page.waitForSelector('[data-testid=signInButton]', {timeout: pageTimeout}).catch((err: { message: any }) => console.log(`Sign In Button Error: ${err.message}`)) // TODO - should this be caught?
+      // await page.click('[data-testid=signInButton]').catch((err: { message: any }) => console.log("Sign In Button Error 2: ", err.message)) // TODO - should this be caught?
+      
       // Complete first login button
       console.log("Entering Credentials")
       console.log("Waiting for iFrame")
+      // const frameName = 'iFrameResizer0'
+      const frameName = 'fedauth-iFrame'
       let frame
       try {
-        frame = await page.waitForFrame(async (frame: any) => { return frame.name() === 'iFrameResizer0'})
+        frame = await page.waitForFrame(async (frame: any) => { return frame.name() === frameName})
       } catch(err) {
         console.log("Failed to wait for iFrame. Searching existing frames now")
         const frames = await page.frames()
-        console.log("FRAMES: ", frames)
-        frame = frames.find((frame: any) => frame.name() === 'iFrameResizer0')
+        // console.log("FRAMES: ", frames)
+        console.log("FRAMES: ", frames.length)
+        try {
+          frame = frames.find((frame: any) => frame.name() === frameName) // .catch didn't work
+        } catch(err) {
+          console.log(`Failed to wait for iFrame - second try: ${err}`)
+        }
       }
-      if(!frame) {
-        throw new Error("Unable to find the login iFrame")
+
+      try {
+        console.log("Waiting for sign in option")
+        await frame.waitForSelector('[data-testid=signIn--email]', {timeout: pageTimeout}).catch((err: { message: any }) => console.log(`Email Sign In Option Error: ${err.message}`)) // TODO - should this be caught?
+        await frame.waitForTimeout(5000) // TODO - resolved error waiting for #email by waiting just a little longer for the page to load enough to actually click the button. Need to implement this everywhere as a precaution. Alternatively the troubleshooting/retry logic could fix it.
+        await frame.click('[data-testid=signIn--email]')
+      } catch(err) {
+        console.log(`sign in frame steps failed: ${err}`)
       }
-      console.log("Waiting for sign in option")
-      await frame.waitForSelector('[data-testid=signIn--email]', {timeout: pageTimeout}).catch((err: { message: any }) => console.log(`Email Sign In Option Error: ${err.message}`)) // TODO - should this be caught?
-      await frame.waitForTimeout(1000) // TODO - resolved error waiting for #email by waiting just a little longer for the page to load enough to actually click the button. Need to implement this everywhere as a precaution. Alternatively the troubleshooting/retry logic could fix it.
-      await frame.click('[data-testid=signIn--email]')
-      console.log("Waiting for email textbox")
-      await frame.waitForSelector('#email')
-      await frame.type('#email', loginCredentials.email)
-      await frame.type('#password', loginCredentials.password)
-      console.log("Submitting Credentials")
-      await frame.click('[data-uid=id-7]') // TODO - Update this to a more defined metric
-  
+
+      try {
+        console.log("Waiting for email textbox")
+        await frame.waitForSelector('#email')
+        await frame.type('#email', loginCredentials.email)
+        await frame.type('#password', loginCredentials.password)
+        console.log("Submitting Credentials")
+        // const signInButton = '[data-uid=id-7]'
+        const signInButton = '[data-uid=id-4]'
+        await frame.click(signInButton) // TODO - Update this to a more defined metric
+      } catch(err) {
+        console.log(`typing frame steps failed: ${err}`)
+      }
+
+      console.log("First Login Completed")
+      await page.waitForNavigation().catch(err => console.log(`Waiting for navigation failed: ${err}`)) // TODO - wait for navigation and then check the URL.
+      const newUrl = await page.url()
+      console.log("Redirected URL: ", newUrl)
+      await page.goto('https://app.plex.tv/desktop/#!/')
+      await page.waitForTimeout(1000) // TODO - Wait for navigation and then check a item on the screen to ensure the right page is up.
+      
       // Complete second login screen - TODO split this to own function. Opening new pages will require pin but not full login.
       console.log("Selecting User Profile")
-      await page.waitForSelector('.admin-icon')
+      await page.waitForSelector('.admin-icon', {timeout: pageTimeout})
       await page.click('.admin-icon')
       
       if (loginCredentials.pin) {
@@ -344,5 +369,184 @@ export const retrieveRawItems = async (type: string): Promise<any> => {
     return rawDataFile
   } catch(err) {
     console.log(`Failed to retrieve raw items. There may be no items for type: ${type}`)
+    return []
+  }
+}
+
+// Returns true or false if records match
+const compareExtractedDataRecord = (record1: any, record2: any): boolean => {
+  // Object Structure
+  //   {
+  //     "title": "Ballad in Blue",
+  //     "year": 1969,
+  //     "length": 119,
+  //     // "description": "A blind musician (Ray Charles) helps a British boy adjust to becoming sightless.",
+  //     // "genre": ["Drama", "Movies"],
+  //     // "resolution": "SD",
+  //     // "airtime": "2000-01-01T00:00:00.000Z",
+  //     // "poster": "img_file"
+  // }
+
+  // If all criteria match
+  if (!record1.error && !record2.error && record1.title === record2.title && record1.year == record2.year && record1.length == record2.length) {
+    return true
+  } else {
+    return false
+  }
+}
+
+const saveExtractedItems = async (items: any[], type: string): Promise<void> => { // TODO - use items & type types
+  console.log("Saving Raw Items")
+  const savePath = `./data/extracted/${type}.json`
+  // const savePath = `../../data/extracted/${type}.json`
+  
+  // If this rawdata type exists, add non-duplicate items to file
+  try {
+    const extractedDataFileBuffer = fs.readFileSync(savePath)
+    // Grab file records
+    const extractedDataFile = JSON.parse(extractedDataFileBuffer.toString())
+    const extractedDataRecords = extractedDataFile.data
+    const updatedExtractedDataRecords = JSON.parse(JSON.stringify(extractedDataRecords))
+
+    // console.log("updatedExtractedDataRecords: ", updatedExtractedDataRecords)
+
+    // Add non-duplicate items to list
+    for(let i = 0; i < items.length; i++) {
+        for (let k = 0; k < extractedDataRecords.length; k++) {
+          if (!compareExtractedDataRecord(items[i], extractedDataRecords[k])) {
+            updatedExtractedDataRecords.push(items[i])
+          }
+        }
+    }
+
+    // Save updated list
+    // TODO - When DB is introduced, conver this to multiple records. Should not be 1 monolithic record of data for all movies. Type will separate objects in queries.
+    const fullUpdatedFile = {
+      type,
+      data: updatedExtractedDataRecords,
+      updatedAt: new Date()
+    }
+    // console.log("fullUpdatedFile: ", fullUpdatedFile)
+    fs.writeFileSync(savePath, JSON.stringify(fullUpdatedFile))
+  } catch (err) {
+    console.log("Error Saving Data: ", err.message)
+    
+    // Save list
+    const fullFile = {
+      type,
+      data: items,
+      updatedAt: new Date()
+    }
+    fs.writeFileSync(savePath, JSON.stringify(fullFile)) // TODO - Need to handle potential error here. TODO - This failed but the file was also updated??? Need to verify data was updated or just go ahead and switch to DB.
+  }
+}
+
+export const extractMediaDetails = async (mediaType: string, page: any): Promise<void> => {
+  let extractedItemsToSave: any[] = []
+  try {
+    console.log("In extractMediaDetails")
+    // Verify login - login fully if not already logged in
+
+    if(page) {
+      console.log("Page exists, retrieving raw items")
+      const rawItems = await retrieveRawItems(mediaType)
+      const rawItemsData = rawItems.data
+
+      // Temporary - TODO - When DB is implemented, will be saving and removing records individually so we will not need to skip/filter them here.
+      console.log("Pulling Extracted Items")
+      const extractedItems = await retrieveExtractedItems(mediaType)
+      console.log("Filtering Raw Items Data")
+      const filteredRawItemsData = rawItemsData.filter(r => extractedItems?.data?.findIndex(e => e.rawData === r) === -1)
+      
+      console.log("Looping through items")
+      const maxItems = filteredRawItemsData?.length <= 25 ? filteredRawItemsData?.length : 25
+      for(let i = 0; i < maxItems; i++) {
+        const currentItem = filteredRawItemsData[i]
+        // Grab detailed page href
+        const hrefBeginIndex = currentItem.indexOf('#!/server')
+        const hrefPartial = currentItem.substring(hrefBeginIndex)
+        const hrefEndIndex = hrefBeginIndex + hrefPartial.indexOf(`\" role=\"link`)
+        const detailsHref = currentItem.substring(hrefBeginIndex, hrefEndIndex) //  // Grabs
+        console.log("Loading Details: ", `https://app.plex.tv/desktop/${detailsHref}`)
+        await page.goto(`https://app.plex.tv/desktop/${detailsHref}`)
+        try {
+          await page.waitForSelector('div[data-testid="preplay-mainTitle"]', { timeout: pageTimeout })
+          // Grab Title
+          const titleContainer = await page.$('div[data-testid="preplay-mainTitle"]')
+          // const titleSpan = await titleContainer.$('span[title]')
+          const titleSpan = await titleContainer.$('span')
+          const title = await getTextContent(titleSpan)
+          console.log("TITLE: ", title)
+
+          // Grab Year
+          const YearContainer = await page.$('div[data-testid="preplay-secondTitle"]')
+          const year = await getTextContent(YearContainer)
+          console.log("YEAR: ", year)
+
+          // Grab Length (EX: '1 hr 20 min')
+          const lengthContainer = await page.$('div[data-testid="preplay-thirdTitle"]')
+          // const lengthSpan = await titleContainer.$('span[title]')
+          const lengthSpan = await lengthContainer.$('span')
+          const length = await getTextContent(lengthSpan)
+          console.log("LENGTH: ", length)
+          
+          // Record Data
+          extractedItemsToSave.push({
+            title,
+            year,
+            length,
+            rawData: currentItem
+            // description,
+            // genres,
+            // resolution,
+            // airtime,
+            // posterImage,
+          })
+        } catch (err) {
+          const emptyPageConfirmation = await page.$('div[class*="EmptyPageContent-title"]')
+          if (emptyPageConfirmation) {
+              console.log("Skipping this record, an error loading occured")
+              extractedItemsToSave.push({
+                rawData: currentItem,
+                error: true
+                // description,
+                // genres,
+                // resolution,
+                // airtime,
+                // posterImage,
+              })
+          }
+        }
+        console.log("----------------------------")
+      }
+
+      // Save extracted records
+      console.log("GOING TO SAVE - 1")
+      // console.log("extractedItemsToSave: ", extractedItemsToSave)
+      await saveExtractedItems(extractedItemsToSave, mediaType)
+    }
+  } catch(err) {
+    console.log(`extractMediaDetails Failed: ${err}`)
+    // console.log("extractedItems: ", extractedItemsToSave)
+    if(extractedItemsToSave.length > 0) {
+      console.log("GOING TO SAVE - 2")
+      await saveExtractedItems(extractedItemsToSave, mediaType).catch(err => console.log(`Saving extracted items failed: ${err}`))
+      console.log("SUCCESS")
+    }
+    throw new Error(`extractMediaDetails Failed: ${err}`)
+  }
+  
+
+}
+
+export const retrieveExtractedItems = async (type: string): Promise<any> => {
+  const path = `./data/extracted/${type}.json`
+  try {
+    const rawDataFileBuffer = fs.readFileSync(path)
+    const rawDataFile = JSON.parse(rawDataFileBuffer.toString())
+    return rawDataFile
+  } catch(err) {
+    console.log(`Failed to retrieve raw items. There may be no items for type: ${type}`)
+    return []
   }
 }
