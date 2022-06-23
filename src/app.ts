@@ -79,6 +79,7 @@ app.get('/pullRawData', async (req: express.Request, res: express.Response) => {
 		browser = await puppeteer.launch({
 			headless,
 			// args: ['--start-fullscreen'],
+			args: ['--no-sandbox'] // TODO - LESS SECURE, NO SANDBOX MEANS THIS IS NOT ISOLATED. NEED TO RUN PUPPETEER WITHOUT ROOT INSTEAD
 			// slowMo: 500
 		})
 
@@ -131,6 +132,7 @@ app.get('/extractMediaDetails', async (req: express.Request, res: express.Respon
 		browser = await puppeteer.launch({
 			headless,
 			// args: ['--start-fullscreen'],
+			args: ['--no-sandbox']
 			// slowMo: 500
 		})
 		

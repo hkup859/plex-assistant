@@ -23,6 +23,9 @@
     },
     "scripts": {
         "start:dev": "nodemon --watch src src/app.ts",
-        "test": "jest --coverage"
+        "test": "jest --coverage",
+        "start": "NODE_PATH=./build node build/app.js",
+        "build": "tsc -p .",
+        "dev": "nodemon src/app.ts"
     }
 }

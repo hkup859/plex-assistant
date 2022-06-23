@@ -1,6 +1,9 @@
 # Database (FS temporarily)
 data/
 
+# Build Files
+build
+
 # Local Troubleshooting Files
 local_details/
 

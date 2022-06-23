@@ -11,6 +11,7 @@
 
     /* Language and Environment */
     "target": "es6",                                  /* Set the JavaScript language version for emitted JavaScript and include compatible library declarations. */
+    "outDir": "./build",                               /* Redirect output structure to the directory. */
 
     /* Modules */
     "module": "commonjs", // commonjs",                                /* Specify what module code is generated. */
