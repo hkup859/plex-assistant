@@ -441,6 +441,60 @@ const saveExtractedItems = async (items: any[], type: string): Promise<void> => 
   }
 }
 
+// 70 min left
+// Starting in 24 min on 9.1 WBONLD (AMG TV)
+// Tonight at 6:30PM on 65.5 WLJCDT5 (This TV)
+// Tomorrow at 12:00AM on 9.4 WBONLD4 (Retro Television Network)
+// Sun, Jul 3 at 12:00AM on 9.4 WBONLD4 (Retro Television Network)
+const createAirDate = (airedText: string, mediaLength: string): Date => {
+  let airedDate = new Date()
+
+  const isFullDate = airedText.substring(3, 4) === ','
+
+  // Set Date Day
+  if (airedText.startsWith('Tomorrow')) {
+    airedDate.setDate(airedDate.getDate()+1)
+  } else if (isFullDate) { //Example: Jul, 12 2022
+    airedDate = new Date((airedText.substring(5, 11)) + airedDate.getFullYear())
+  }
+
+  let timeHours = 0
+  let timeMinutes = 0
+
+  if (isFullDate || airedText.startsWith('Tonight') || airedText.startsWith('Tomorrow')) {
+    const timeText = airedText.substring(airedText.indexOf('at '), airedText.indexOf(' on'))
+    const timeSplitIndex = timeText.indexOf(':')
+    
+    const timeHoursText = timeText.substring(0, timeSplitIndex)
+    timeHours = (timeHoursText === '12' ? 0 : parseInt(timeHoursText)) + (timeText.substring(timeText.length - 2) === 'PM' ? 12 : 0)
+    timeMinutes = parseInt(timeText.substring(timeSplitIndex+1, timeSplitIndex+3))
+  } else { // We are dealing with text that is either "Starting in" or "left" (upcoming media or currently playing media)
+    // Left Example: 70 min left || 2 hr left || 1 hr 57 min left
+    // Starting Example:  Starting in 24 min on 9.1 WBONLD (AMG TV)
+    const startingIndex = airedText.indexOf('Starting in ')
+    const substringStartingIndex = startingIndex + 'Starting in '.length
+
+    const relativeTimeMinutes = parseInt(airedText.substring(substringStartingIndex, airedText.indexOf(' min')))  
+    const relativeTimeHours = airedText.indexOf('hr') !== -1 ? parseInt(airedText.substring(substringStartingIndex, airedText.indexOf(' hr'))) : 0 // There should not be hrs in this type of airdate, but the check is left in just in case based on how it would likely be formatted.
+
+    if(startingIndex === 0) {
+      timeMinutes = airedDate.getMinutes() + relativeTimeMinutes
+      timeHours = airedDate.getHours() + relativeTimeHours
+    } else {
+      const mediaLengthMinutes = parseInt(mediaLength.substring(mediaLength.indexOf('hr ') + 'hr '.length, mediaLength.indexOf('min')))
+      const mediaLengthHours = parseInt(mediaLength.substring(0, mediaLength.indexOf(' hr')))
+      
+      timeMinutes = airedDate.getMinutes() - (mediaLengthMinutes - relativeTimeMinutes)
+      timeHours = airedDate.getHours() - (mediaLengthHours - relativeTimeHours)
+    }
+  }
+  airedDate.setHours(timeHours)
+  airedDate.setMinutes(timeMinutes)
+  airedDate.setSeconds(0)
+  airedDate.setMilliseconds(0)
+  return airedDate
+}
+
 export const extractMediaDetails = async (mediaType: string, page: any): Promise<void> => {
   let extractedItemsToSave: any[] = []
   try {
@@ -489,6 +543,48 @@ export const extractMediaDetails = async (mediaType: string, page: any): Promise
           const lengthSpan = await lengthContainer.$('span')
           const length = await getTextContent(lengthSpan)
           console.log("LENGTH: ", length)
+
+          // Grab Description
+          // <div class="PrePlaySummary-summary-uEsl6j"><div style="overflow: hidden; max-height: 78px;"><div class="Measure-container-_70qZ9">In a case of mistaken identity, George is swapped with a royal monkey with a totally different personality. While the fun-loving George brings some much needed joy to a stuffy kingdom ruled by a stern king, Ted is puzzled by the snooty look-a-like.<div class="Measure-scrollContainer-8hW9vB"><div class="Measure-expandContent-asSKSW"></div></div><div class="Measure-scrollContainer-8hW9vB"><div class="Measure-shrinkContent-phwzLN Measure-expandContent-asSKSW"></div></div></div></div><button aria-haspopup="true" data-uid="id-207" role="button" class="CollapsibleText-readMore-wteMHG DisclosureArrowButton-disclosureArrowButton-x_5Y9W Link-link-SxPFpG DisclosureArrowButton-medium-OfMgTz Link-link-SxPFpG Link-default-BXtKLo" type="button">Read More<span class="CollapsibleText-readMoreArrow-X9_6sn DisclosureArrowButton-disclosureArrow-iPIByG DisclosureArrow-disclosureArrow-NTDkGd DisclosureArrowButton-down-s8HHHA DisclosureArrowButton-medium-OfMgTz DisclosureArrow-down-eIFuNm DisclosureArrow-up-rO9WLr DisclosureArrow-default-IjziOV DisclosureArrow-medium-fXE_g9"></span></button></div>
+          // // <button aria-haspopup="true" data-uid="id-207" role="button" class="CollapsibleText-readMore-wteMHG DisclosureArrowButton-disclosureArrowButton-x_5Y9W Link-link-SxPFpG DisclosureArrowButton-medium-OfMgTz Link-link-SxPFpG Link-default-BXtKLo" type="button">Read More<span class="CollapsibleText-readMoreArrow-X9_6sn DisclosureArrowButton-disclosureArrow-iPIByG DisclosureArrow-disclosureArrow-NTDkGd DisclosureArrowButton-down-s8HHHA DisclosureArrowButton-medium-OfMgTz DisclosureArrow-down-eIFuNm DisclosureArrow-up-rO9WLr DisclosureArrow-default-IjziOV DisclosureArrow-medium-fXE_g9"></span></button>
+          // class=Measure-container-_70qZ9
+          const descriptionContainer = await page.$('div[class*="PrePlaySummary-summary"]')
+          // const lengthSpan = await titleContainer.$('span[title]')
+          const descriptionDiv = await descriptionContainer.$('div[class*="Measure-container"]')
+          const description = await getTextContent(descriptionDiv)
+          console.log("description: ", description)
+
+          // Grab extra data items (genre, resolution, airtime, etc)
+          const detailContainers = await page.$$('div[class*="PrePlayDetailsGroupItem-groupItem"]')
+          // let { genres, resolution, airData, extraDatas }
+          let genres, resolution, airData, extraDatas
+          for(let i = 0; i < detailContainers.length; i++) {
+            const currentContainer = detailContainers[i]
+            // Determine item type
+            const labelDiv = await currentContainer.$('div[class*="PrePlayDetailsGroupItem-label"')
+            const labelValue = await getTextContent(labelDiv)
+            const valueDiv = await currentContainer.$('div[class*="PrePlayDetailsGroupItem-content"')
+            switch(labelValue) {
+              case 'Genre':
+                // TODO - Code
+                break
+              case 'Video':
+                resolution = await getTextContent(valueDiv)
+                break
+              case 'Airs' || 'Airing':
+                const airedText = await getTextContent(valueDiv)
+                const airedNetwork = airedText.substring(airedText.indexOf('on '))
+
+                airData = {
+                  date: createAirDate(airedText, length),
+                  network: airedNetwork
+                }
+                break
+              default:
+                // TODO - Code - unknown fields, save raw html
+                break
+            }
+          }
           
           // Record Data
           extractedItemsToSave.push({
@@ -499,7 +595,7 @@ export const extractMediaDetails = async (mediaType: string, page: any): Promise
             // description,
             // genres,
             // resolution,
-            // airtime,
+            // airData,
             // posterImage,
           })
         } catch (err) {
