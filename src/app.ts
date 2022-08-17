@@ -2,7 +2,11 @@ import express from 'express'
 import puppeteer from 'puppeteer'
 import bodyParser from 'body-parser'
 import dotenv from 'dotenv'
-import { logInToPlex, navigateToLiveTVPage, grabAndSaveScreenItems, selectMediaType, saveLogin, retrieveLogin, retrieveRawItems, extractMediaDetails } from './controllers/rawdata'
+// import { logInToPlex, navigateToLiveTVPage, grabAndSaveScreenItems, selectMediaType, saveLogin, retrieveLogin, retrieveRawItems, extractMediaDetails } from './controllers/rawdata'
+// import { test } from './controllers/media'
+import { findAllUnprocessedMedia } from './controllers/media'
+import { logInToPlex, navigateToLiveTVPage, selectMediaType, extractMediaDetails, grabAllScreenItems } from './controllers/puppeter'
+import { saveLogin, retrieveLogin } from './controllers/authentication'
 
 // Allow pulling ENV variable from .env file
 dotenv.config()
@@ -35,6 +39,19 @@ app.use(bodyParser.json())
 // return typeof x.code === 'number';
 // };
 
+// app.post('/testRoute', async (req: express.Request, res: express.Response) => {
+// 	console.log("In testRoute")
+// 	try {
+// 		// Pull variables from query
+// 		const { nothing }: {nothing: any} = req.body
+// 		console.log("NOTHING: ", nothing)
+// 		const response = await test()
+// 		return res.status(200).json(response)
+// 	} catch(err) {
+// 		return res.status(500).json(`saveLogin failed: ${err}`)
+// 	}
+// })
+
 app.post('/saveLogin', async (req: express.Request, res: express.Response) => {
 	console.log("In saveLogin")
 	try {
@@ -59,6 +76,7 @@ app.post('/retrieveLogin', async (req: express.Request, res: express.Response) =
 	}
 })
 
+// Grabs the data from plex
 app.get('/pullRawData', async (req: express.Request, res: express.Response) => {
 	console.log("In pullRawData")
 	let browser
@@ -87,7 +105,7 @@ app.get('/pullRawData', async (req: express.Request, res: express.Response) => {
 		let page = await logInToPlex(browser, userLabel)
 		page = await navigateToLiveTVPage(page)
 		page = await selectMediaType(page, mediaType)
-		await grabAndSaveScreenItems(page, mediaType)
+		await grabAllScreenItems(page, mediaType)
 
 		console.log("Closing browser")
 		await browser.close()
@@ -103,7 +121,8 @@ app.get('/pullRawData', async (req: express.Request, res: express.Response) => {
 	
 })
 
-app.get('/retrieveRawData', async (req: express.Request, res: express.Response) => {
+// Grabs records with only rawData
+app.get('/retrieveUnprocessedMedia', async (req: express.Request, res: express.Response) => {
 	console.log("In retrieveRawData")
 	try {
 		// Pull variables from query
@@ -114,19 +133,18 @@ app.get('/retrieveRawData', async (req: express.Request, res: express.Response) 
 			return res.status(500).json("mediaType is a required field")
 		}
 
-		const rawItems = await retrieveRawItems(mediaType)
+		const rawItems = await findAllUnprocessedMedia()
 		return res.json(rawItems)
 	} catch(err) {
 		return res.status(500).json(`retrieveRawData failed: ${err}`)
 	}
-	
 })
 
+// Processes all records with only rawData
 app.get('/extractMediaDetails', async (req: express.Request, res: express.Response) => {
 	console.log("In extractMediaDetails")
 	let browser
 	try {
-		const mediaType: string = req.query?.mediaType as string // TODO - use enum type
 		const headless: boolean = (req.query?.headless as string) !== 'false' // TODO - use enum type
 		const userLabel: string = req.query?.userLabel as string
 		browser = await puppeteer.launch({
@@ -137,7 +155,7 @@ app.get('/extractMediaDetails', async (req: express.Request, res: express.Respon
 		})
 		
 		const page = await logInToPlex(browser, userLabel)
-		const response = await extractMediaDetails(mediaType, page)
+		const response = await extractMediaDetails(page)
 		console.log("Closing browser")
 		if (browser) 
 			await browser.close().catch(() => console.log("Browser close failure. Browser was never opened."))
@@ -152,4 +170,76 @@ app.get('/extractMediaDetails', async (req: express.Request, res: express.Respon
 	}
 })
 
-app.listen(port, () => console.log(`plex-assistant server listening on port ${port}!`))
+//Get Mongo/Mongoose Connected
+// process.env[
+	// "mongo": {
+    //     "uri": "mongodb://localhost:27017/freds",
+    //     "options": {
+    //         "auto_reconnect": false,
+    //         "keepAlive": 1,
+    //         "connectTimeoutMS": 30000,
+    //         "useNewUrlParser": true,
+    //         "useUnifiedTopology": true
+    //     }
+    // }
+var mongoose = require('mongoose');
+var mongoUri = 'mongodb://localhost:27017/plex-assistant' // config.get('mongo.uri');
+var mongoOptions = {
+	// "auto_reconnect": false,
+	"keepAlive": 1,
+	"connectTimeoutMS": 30000,
+	"useNewUrlParser": true,
+	"useUnifiedTopology": true
+}
+
+var initMongo = (callback) => {
+	mongoose.connection.on('connecting', function () {
+		console.log('Mongo connecting');
+	});
+
+	mongoose.connection.on('error', function (error) {
+		console.log('Error in MongoDb connection: ' + error);
+		mongoose.disconnect();
+	});
+
+	mongoose.connection.on('connected', function () {
+		console.log('Mongo connected!');
+	});
+
+	mongoose.connection.once('open', function () {
+		console.log('Mongo connection open');
+		callback();
+	});
+
+	mongoose.connection.on('reconnected', function () {
+		console.log('Mongo reconnected');
+	});
+
+	mongoose.connection.on('disconnected', function () {
+		console.log('Mongo disconnected');
+		console.log('mongoUri is: ' + mongoUri);
+		setTimeout(function () {
+			mongoose.connect(mongoUri, mongoOptions);
+		}, 500);
+	});
+
+	mongoose.connect(mongoUri, mongoOptions);
+};
+
+// var server = app.listen(port, function() {
+// 	initMongo(function () {
+// 		var host = server.address().address;
+// 		var port = server.address().port;
+// 		logger.info("We are listening on http://%s:%s", host, port);
+// 	})
+// });
+
+app.listen(port, () => {
+	initMongo(() => {
+		console.log("Mongo Callback Finished")
+		console.log(`plex-assistant server listening on port ${port}!`)
+	})
+	// console.log(`plex-assistant server listening on port ${port}!`)
+	}
+)
+// 
