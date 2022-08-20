@@ -4,7 +4,10 @@ import dotenv from 'dotenv'
 dotenv.config()
 
 const pageTimeout = process.env["PAGE_TIMEOUT"]
+const extractMediaDetailsLimit = process.env['EXTRACT_MEDIA_DETAILS_LIMIT'] || 25
 const dvrSections = ["Episodes", "Movies", "Shows", "Sports", "News"]
+const weekDays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', "Saturday"]
+const weekDaysAbbreviations = weekDays.map(x => x.substring(0, 3))
 
 import { retrieveLogin } from './authentication'
 import { createMedia, findAllUnprocessedMedia, updateMedia} from './media'
@@ -206,29 +209,70 @@ const findPropertyByTextContent = async (properties: any, searchText: any, match
 // Starting in 24 min on 9.1 WBONLD (AMG TV)
 // Tonight at 6:30PM on 65.5 WLJCDT5 (This TV)
 // Tomorrow at 12:00AM on 9.4 WBONLD4 (Retro Television Network)
+// Saturday at 12:00PM on 65.5 WLJCDT5 (This TV) 2 hr 30 min
 // Sun, Jul 3 at 12:00AM on 9.4 WBONLD4 (Retro Television Network)
+// TODO - Dates appear to work, but are stored in timezone specific format. This conflicts with mongo which only uses UTC. Therefore we need to convert all dates to UTC.
 const createAirDate = (airedText: string, mediaLength: string): Date => {
+    console.log("In createAirDate: ", airedText, mediaLength)
     let airedDate = new Date()
+    console.log("airedDate 1: ", airedDate)
   
-    const isFullDate = airedText.substring(3, 4) === ','
+    const relativeDateIndex = weekDays.findIndex(weekDay => weekDay === airedText.substring(0, weekDay.length))
+    console.log("relativeDateIndex: ", relativeDateIndex)
+    const isRelativeDate = relativeDateIndex !== -1
+    const isFullDate = !isRelativeDate && weekDaysAbbreviations.includes(airedText.substring(0, 3)) && !isNaN(parseInt(airedText.substring(9, 11)))
+    // const isFullDate = weekDaysAbbreviation.includes(airedText.substring(0, 3)) && !isNaN(parseInt(airedText.substring(5,7)))  // airedText.substring(3, 4) === ',' // TODO Not all full dates have a comma... Check if the first 3 characters made a day, then the substring(5,7) characters are a date just to be safe
+
+    console.log("isFullDate: ", isFullDate)
+    console.log("!isRelativeDate: ", !isRelativeDate)
+    console.log("weekDaysAbbreviations.includes(airedText.substring(0, 3)): ", weekDaysAbbreviations.includes(airedText.substring(0, 3)))
+    // console.log("airedText.substring(5,7): ", airedText.substring(5,7))
+    // console.log("parseInt(airedText.substring(5,7)): ", parseInt(airedText.substring(5,7)))
+    // console.log("!isNaN(parseInt(airedText.substring(5,7)): ", !isNaN(parseInt(airedText.substring(5,7))))
   
     // Set Date Day
     if (airedText.startsWith('Tomorrow')) {
       airedDate.setDate(airedDate.getDate()+1)
-    } else if (isFullDate) { //Example: Jul, 12 2022
-      airedDate = new Date((airedText.substring(5, 11)) + airedDate.getFullYear())
+      console.log("airedDate 2: ", airedDate)
+    } else if (isRelativeDate) {
+        // Convert Day ("Saturday") into Date (3 days in the future, so add 3 to airedDate)
+        console.log("BEFOREHAND: ", airedText, airedDate)
+        airedDate.setDate(airedDate.getDate() + (airedDate.getDay() - relativeDateIndex))
+        console.log("AFTER: ", airedDate)
+        // Untested, but everything else works
+        throw new Error("FORCE FAIL") // TODO - remove after confirming this works
+    } else if (isFullDate) { // Example: Jul, 12 2022 || Jul 3 2022
+      airedDate = new Date(`${airedText.substring(5, 11)} ${airedDate.getFullYear()}`)
+      console.log("airedDate 3: ", airedDate)
+      console.log("airedDate 3b: ", airedDate.getHours())
+      console.log("airedDate 3c: ", airedDate.setHours(0))
+      console.log("airedDate 3d: ", airedDate.getHours())
+      // const testDate = new Date(new Date().toUTCString().substring(0, 25))
+      // console.log("testDate 1: ", testDate)
+      // testDate.setHours(20)
+      // console.log("testDate 2: ", testDate)
     }
   
     let timeHours = 0
     let timeMinutes = 0
+
+    console.log("timeHours 1: ", timeHours)
+    console.log("timeMinutes 1: ", timeMinutes)
   
     if (isFullDate || airedText.startsWith('Tonight') || airedText.startsWith('Tomorrow')) {
-      const timeText = airedText.substring(airedText.indexOf('at '), airedText.indexOf(' on'))
-      const timeSplitIndex = timeText.indexOf(':')
-      
-      const timeHoursText = timeText.substring(0, timeSplitIndex)
-      timeHours = (timeHoursText === '12' ? 0 : parseInt(timeHoursText)) + (timeText.substring(timeText.length - 2) === 'PM' ? 12 : 0)
-      timeMinutes = parseInt(timeText.substring(timeSplitIndex+1, timeSplitIndex+3))
+        console.log("airedText: ", airedText)
+        // airedText Options:
+            // Tonight at 6:30PM on 65.5 WLJCDT5 (This TV)
+            // Tomorrow at 12:00AM on 9.4 WBONLD4 (Retro Television Network)
+        const timeText = airedText.substring(airedText.indexOf('at ') + 'at '.length, airedText.indexOf(' on'))
+        const timeSplitIndex = timeText.indexOf(':')
+        
+        const timeHoursText = timeText.substring(0, timeSplitIndex)
+        console.log("timeHoursText: ", timeHoursText)
+        timeHours = (timeHoursText === '12' ? 0 : parseInt(timeHoursText)) + (timeText.substring(timeText.length - 2) === 'PM' ? 12 : 0)
+        console.log("timeHours 2: ", timeHours)
+        console.log("timeMinutes 2: ", timeMinutes, timeText.substring(timeSplitIndex+1, timeSplitIndex+3))
+        timeMinutes = parseInt(timeText.substring(timeSplitIndex+1, timeSplitIndex+3))
     } else { // We are dealing with text that is either "Starting in" or "left" (upcoming media or currently playing media)
       // Left Example: 70 min left || 2 hr left || 1 hr 57 min left
       // Starting Example:  Starting in 24 min on 9.1 WBONLD (AMG TV)
@@ -241,18 +285,32 @@ const createAirDate = (airedText: string, mediaLength: string): Date => {
       if(startingIndex === 0) {
         timeMinutes = airedDate.getMinutes() + relativeTimeMinutes
         timeHours = airedDate.getHours() + relativeTimeHours
+        console.log("timeHours 3: ", timeHours)
+        console.log("timeMinutes 3: ", timeMinutes)
       } else {
         const mediaLengthMinutes = parseInt(mediaLength.substring(mediaLength.indexOf('hr ') + 'hr '.length, mediaLength.indexOf('min')))
         const mediaLengthHours = parseInt(mediaLength.substring(0, mediaLength.indexOf(' hr')))
         
+        console.log("airedDate.getMinutes(): ", airedDate.getMinutes())
+        console.log("mediaLengthMinutes: ", mediaLengthMinutes)
+        console.log("relativeTimeMinutes: ", relativeTimeMinutes)
         timeMinutes = airedDate.getMinutes() - (mediaLengthMinutes - relativeTimeMinutes)
         timeHours = airedDate.getHours() - (mediaLengthHours - relativeTimeHours)
+        console.log("timeHours 4: ", timeHours)
+        console.log("timeMinutes 4: ", timeMinutes)
       }
     }
+    console.log("airedDate 4: ", airedDate)
+    console.log("timeHours Final: ", timeHours)
+    console.log("timeMinutes Final: ", timeMinutes)
     airedDate.setHours(timeHours)
+    console.log("airedDate 5: ", airedDate)
     airedDate.setMinutes(timeMinutes)
+    console.log("airedDate 6: ", airedDate)
     airedDate.setSeconds(0)
+    console.log("airedDate 7: ", airedDate)
     airedDate.setMilliseconds(0)
+    console.log("airedDate 8: ", airedDate)
     return airedDate
   }
 
@@ -317,16 +375,16 @@ export const extractMediaDetails = async (page: any): Promise<void> => {
         // const rawItems = await retrieveRawItems(mediaType)
         // TODO - Test this and confirm it is an array and not an object with an array on it.
         const rawItemRecords = await findAllUnprocessedMedia()
-        console.log("rawItemRecords: ", rawItemRecords[0])
         
         console.log("Looping through items")
-        const maxItems = rawItemRecords?.length <= 25 ? rawItemRecords?.length : 25
+        const maxItems = rawItemRecords?.length <= extractMediaDetailsLimit ? rawItemRecords?.length : 25
         for(let i = 0; i < maxItems; i++) {
-            let title = ''
-            let year = ''
-            let length = ''
-            let description = ''
-            let genres = [], resolution = '', airData = {}, extraDatas = {}
+            // Maybe Mark as undefined and declare a type? Mongo gets set with these empty string values, which is not great
+            let title: string | undefined = undefined
+            let year: string | undefined = undefined
+            let length: string | undefined = undefined
+            let description: string | undefined = undefined
+            let genres: string[] | undefined = undefined, resolution: string | undefined = undefined, airData: any | undefined = undefined, extraDatas: any | undefined = undefined
 
             const currentItem = rawItemRecords[i]
             const currentRawData = currentItem.rawData
@@ -337,6 +395,12 @@ export const extractMediaDetails = async (page: any): Promise<void> => {
             const hrefEndIndex = hrefBeginIndex + hrefPartial.indexOf(`\" role=\"link`)
             const detailsHref = currentRawData.substring(hrefBeginIndex, hrefEndIndex) //  // Grabs
             console.log("Loading Details: ", `https://app.plex.tv/desktop/${detailsHref}`)
+            if (`https://app.plex.tv/desktop/${detailsHref}` == 'https://app.plex.tv/desktop/#!/server/208c0b35cc182ee6422cf4bec739bb416aeab26b/provider/tv.plex.providers.epg.cloud%3A4/details?key=%2Ftv.plex.providers.epg.cloud%3A4%2Fmetadata%2Fplex%253A%252F%252Fmovie%252F5fc68b591a65df002dd21794')
+            {
+              console.log("**********************************")
+              console.log("THIS HAD PREVIOUSLY FAILED")
+              console.log("**********************************")
+            }
             await page.goto(`https://app.plex.tv/desktop/${detailsHref}`)
             try {
                 await page.waitForSelector('div[data-testid="preplay-mainTitle"]', { timeout: pageTimeout })
@@ -375,60 +439,58 @@ export const extractMediaDetails = async (page: any): Promise<void> => {
                 // let { genres, resolution, airData, extraDatas }
                 // let genres = [], resolution = '', airData = {}, extraDatas = {}
                 for(let i = 0; i < detailContainers.length; i++) {
-                console.log("Detail 1")
-                const currentContainer = detailContainers[i]
-                // Determine item type
-                const labelDiv = await currentContainer.$('div[class*="PrePlayDetailsGroupItem-label"')
-                const labelValue = await getTextContent(labelDiv)
-                const valueDiv = await currentContainer.$('div[class*="PrePlayDetailsGroupItem-content"')
-                console.log("Detail 2")
-                switch(labelValue) {
-                    case 'Genre':
-                    // TODO - Code
-                    // <button type="button" role="button" class="PrePlayTagListLink-tagsListLink-EXpbI2 Link-link-vSsQW1 Link-default-bdWb1S">and 2 more</button>
-                    console.log("Detail 3")
-                    // TODO - This whole section doesn't work as expected. ValueDiv is not finding the moreButton and even though genreSpans returns it doesn't let you call getProperty because they are elementHandles instead of JSHandles
-                    const buttonOptions = await valueDiv.$$('button[class*="PrePlayTagListLink-tagsListLink"]')
-                    const moreButton = await findPropertyByTextContent(buttonOptions, ['And ', ' More'], true)
-                    if (moreButton) {
-                        console.log("YES MORE BUTTON")
-                        await moreButton.click()
+                    console.log("Detail 1")
+                    const currentContainer = detailContainers[i]
+                    // Determine item type
+                    const labelDiv = await currentContainer.$('div[class*="PrePlayDetailsGroupItem-label"')
+                    const labelValue = await getTextContent(labelDiv)
+                    const valueDiv = await currentContainer.$('div[class*="PrePlayDetailsGroupItem-content"')
+                    console.log("Detail 2")
+                    switch(labelValue) {
+                        case 'Genre':
+                        // TODO - Code
+                        // <button type="button" role="button" class="PrePlayTagListLink-tagsListLink-EXpbI2 Link-link-vSsQW1 Link-default-bdWb1S">and 2 more</button>
+                        console.log("Detail 3")
+                        // TODO - This whole section doesn't work as expected. ValueDiv is not finding the moreButton and even though genreSpans returns it doesn't let you call getProperty because they are elementHandles instead of JSHandles
+                        const buttonOptions = await valueDiv.$$('button[class*="PrePlayTagListLink-tagsListLink"]')
+                        const moreButton = await findPropertyByTextContent(buttonOptions, ['And ', ' More'], true)
+                        if (moreButton) {
+                            console.log("YES MORE BUTTON")
+                            await moreButton.click()
+                        }
+                        // const genreSpans = await valueDiv.$$('span[class*="PrePlayTagList-tagItem"')
+                        console.log("Detail 4")
+                        const rawGenres = await getTextContent(valueDiv)
+                        genres = rawGenres.split(', ')
+                        console.log("genres: ", genres)
+                        console.log("Detail 5")
+                        break
+                        case 'Video':
+                        console.log("Detail 6")
+                        resolution = await getTextContent(valueDiv)
+                        console.log("Detail 7")
+                        break
+                        case 'Airs' || 'Airing':
+                        console.log("Detail 8")
+                        const airedText = await getTextContent(valueDiv)
+                        const airedNetwork = airedText.substring(airedText.indexOf('on '))
+                        console.log("Detail 9")
+        
+                        airData = {
+                            date: createAirDate(airedText, length),
+                            network: airedNetwork
+                        }
+                        break
+                        default:
+                        console.log("Detail 10")
+                        // TODO - Code - unknown fields, save raw html
+                        const innerHTML = await valueDiv.$eval("*", (element) => {
+                            return element.innerHTML
+                        })
+                        console.log("Detail 12")
+                        extraDatas[labelValue] = innerHTML
+                        break
                     }
-                    const genreSpans = await valueDiv.$$('span[class*="PrePlayTagList-tagItem"')
-                    console.log("Detail 4")
-                    console.log("genreSpans: ", genreSpans.length)
-                    const rawGenres = await getTextContent(valueDiv)
-                    console.log("rawGenres: ", rawGenres.split(', '))
-                    // genres = rawGenres.split(', ')
-                    throw new Error("FORCE FAIL")
-                    console.log("Detail 5")
-                    break
-                    case 'Video':
-                    console.log("Detail 6")
-                    resolution = await getTextContent(valueDiv)
-                    console.log("Detail 7")
-                    break
-                    case 'Airs' || 'Airing':
-                    console.log("Detail 8")
-                    const airedText = await getTextContent(valueDiv)
-                    const airedNetwork = airedText.substring(airedText.indexOf('on '))
-                    console.log("Detail 9")
-    
-                    airData = {
-                        date: createAirDate(airedText, length),
-                        network: airedNetwork
-                    }
-                    break
-                    default:
-                    console.log("Detail 10")
-                    // TODO - Code - unknown fields, save raw html
-                    const innerHTML = await valueDiv.$eval("*", (element) => {
-                        return element.innerHTML
-                    })
-                    console.log("Detail 12")
-                    extraDatas[labelValue] = innerHTML
-                    break
-                }
                 }
     
                 console.log("READY!")
@@ -457,18 +519,22 @@ export const extractMediaDetails = async (page: any): Promise<void> => {
                         error: true
                     })
                 } else {
+                    console.log("**********************************")
+                    console.log("ENCOUNTERED AN UNEXPECTED ERROR!!!")
+                    console.log("**********************************")
+                    throw new Error("STOP THINGS")
                     // TODO - Real Error -> Add ability to save error message
-                    await updateMedia(currentItem._id, {
-                        error: true,
-                        title,
-                        year,
-                        length,
-                        description,
-                        genres,
-                        resolution,
-                        airData,
-                        extraDatas,
-                    })   
+                    // await updateMedia(currentItem._id, {
+                    //     error: true,
+                    //     title,
+                    //     year,
+                    //     length,
+                    //     description,
+                    //     genres,
+                    //     resolution,
+                    //     airData,
+                    //     extraDatas,
+                    // })   
                 }
             }
             console.log("----------------------------")
@@ -481,3 +547,5 @@ export const extractMediaDetails = async (page: any): Promise<void> => {
     
   
   }
+
+  // TODO - Getting errors when there is no problem, aka the page loads fine.

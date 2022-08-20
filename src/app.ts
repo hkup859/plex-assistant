@@ -7,6 +7,7 @@ import dotenv from 'dotenv'
 import { findAllUnprocessedMedia } from './controllers/media'
 import { logInToPlex, navigateToLiveTVPage, selectMediaType, extractMediaDetails, grabAllScreenItems } from './controllers/puppeter'
 import { saveLogin, retrieveLogin } from './controllers/authentication'
+import { testMedia } from './models/media'
 
 // Allow pulling ENV variable from .env file
 dotenv.config()
@@ -39,18 +40,18 @@ app.use(bodyParser.json())
 // return typeof x.code === 'number';
 // };
 
-// app.post('/testRoute', async (req: express.Request, res: express.Response) => {
-// 	console.log("In testRoute")
-// 	try {
-// 		// Pull variables from query
-// 		const { nothing }: {nothing: any} = req.body
-// 		console.log("NOTHING: ", nothing)
-// 		const response = await test()
-// 		return res.status(200).json(response)
-// 	} catch(err) {
-// 		return res.status(500).json(`saveLogin failed: ${err}`)
-// 	}
-// })
+app.post('/testRoute', async (req: express.Request, res: express.Response) => {
+	console.log("In testRoute")
+	try {
+		// Pull variables from query
+		const { nothing }: {nothing: any} = req.body
+		console.log("NOTHING: ", nothing)
+		const response = await testMedia()
+		return res.status(200).json(response)
+	} catch(err) {
+		return res.status(500).json(`saveLogin failed: ${err}`)
+	}
+})
 
 app.post('/saveLogin', async (req: express.Request, res: express.Response) => {
 	console.log("In saveLogin")

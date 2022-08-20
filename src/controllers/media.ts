@@ -19,7 +19,7 @@ export const createMedia = async (rawData, mediaType): Promise<any> => {
 
 export const updateMedia = async (_id, mediaUpdateObject): Promise<any> => {
     console.log("In media controller createMedia")
-    return MediaModel.updateMedia({ _id, mediaUpdateObject }) // Does this need await?
+    return MediaModel.updateMedia(_id, mediaUpdateObject) // Does this need await?
 }
 
 export const findMedia = async (searchCriteria) => {
