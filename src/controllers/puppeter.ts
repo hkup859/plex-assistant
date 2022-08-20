@@ -244,9 +244,9 @@ const createAirDate = (airedText: string, mediaLength: string): Date => {
     } else if (isFullDate) { // Example: Jul, 12 2022 || Jul 3 2022
       airedDate = new Date(`${airedText.substring(5, 11)} ${airedDate.getFullYear()}`)
       console.log("airedDate 3: ", airedDate)
-      console.log("airedDate 3b: ", airedDate.getHours())
-      console.log("airedDate 3c: ", airedDate.setHours(0))
-      console.log("airedDate 3d: ", airedDate.getHours())
+      // console.log("airedDate 3b: ", airedDate.getHours())
+      // console.log("airedDate 3c: ", airedDate.setHours(0))
+      // console.log("airedDate 3d: ", airedDate.getHours())
       // const testDate = new Date(new Date().toUTCString().substring(0, 25))
       // console.log("testDate 1: ", testDate)
       // testDate.setHours(20)
@@ -522,7 +522,7 @@ export const extractMediaDetails = async (page: any): Promise<void> => {
                     console.log("**********************************")
                     console.log("ENCOUNTERED AN UNEXPECTED ERROR!!!")
                     console.log("**********************************")
-                    throw new Error("STOP THINGS")
+                    // throw new Error("STOP THINGS")
                     // TODO - Real Error -> Add ability to save error message
                     // await updateMedia(currentItem._id, {
                     //     error: true,
