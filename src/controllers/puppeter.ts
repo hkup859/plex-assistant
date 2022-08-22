@@ -93,27 +93,12 @@ export const logInToPlex = async (browser: any, userLabel: string): Promise<any>
       await page.goto('https://app.plex.tv/desktop/#!/')
       await page.waitForTimeout(1000) // TODO - Wait for navigation and then check a item on the screen to ensure the right page is up.
       
-      // Complete second login screen - TODO split this to own function. Opening new pages will require pin but not full login.
-      console.log("Selecting User Profile")
-      await page.waitForSelector('.admin-icon', {timeout: pageTimeout})
-      await page.click('.admin-icon')
-      
-      if (loginCredentials.pin) {
-        console.log("PIN Detected. Entering PIN Data.")
-        // await page.waitForSelector('.pin-digit-container') // Is this redundant?
-        await page.waitForSelector('.pin-digit,current', {timeout: pageTimeout}).catch((err: { message: any }) => console.log(`Pin Selector Error: ${err.message}`)) // TODO - should this be caught?
-        await page.type('.pin-digit,current', loginCredentials.pin.substr(0, 1))
-        await page.waitForTimeout(1000)
-        await page.type('.pin-digit,current', loginCredentials.pin.substr(1, 1))
-        await page.waitForTimeout(1000)
-        await page.type('.pin-digit,current', loginCredentials.pin.substr(2, 1))
-        await page.waitForTimeout(1000)
-        await page.type('.pin-digit,current', loginCredentials.pin.substr(3, 1))
-      }
-  
+      // Complete second login screen
+      await authenticatePlexUser(page, loginCredentials.pin)
+
       // TODO - Add a wait for selector here. Something that identifies we are on the next page. Maybe a waitForNavigation?
       
-      return page
+      return { page, pin: loginCredentials.pin }
     } catch (err) {
       console.log(`Failed to login: ${err}`)
       if (page) {
@@ -123,6 +108,24 @@ export const logInToPlex = async (browser: any, userLabel: string): Promise<any>
       }
     }
     
+}
+
+const authenticatePlexUser = async (page: any, pin: string) => {
+  console.log("Selecting User Profile")
+  await page.waitForSelector('.admin-icon', {timeout: pageTimeout}) // TODO - provide more customization? Perhaps there are multiple admins or maybe even non-admins with some management rights?
+  await page.click('.admin-icon')
+  // await page.waitForSelector('.pin-digit-container') // Is this redundant?
+  // TODO - Any additional checks we could do to see if we are on this page? We are now using this logic when we encounter an extraction error and it would be good to KNOW that we are on this page.
+  if (pin) {
+    await page.waitForSelector('.pin-digit,current', {timeout: pageTimeout}).catch((err: { message: any }) => console.log(`Pin Selector Error: ${err.message}`)) // TODO - should this be caught?
+    await page.type('.pin-digit,current', pin.substr(0, 1)) // TODO convert these to substring. substr is deprecated.
+    await page.waitForTimeout(1000)
+    await page.type('.pin-digit,current', pin.substr(1, 1))
+    await page.waitForTimeout(1000)
+    await page.type('.pin-digit,current', pin.substr(2, 1))
+    await page.waitForTimeout(1000)
+    await page.type('.pin-digit,current', pin.substr(3, 1))
+  }
 }
 
 export const navigateToLiveTVPage = async (page: any): Promise<any> => { // TODO use page type
@@ -236,11 +239,11 @@ const createAirDate = (airedText: string, mediaLength: string): Date => {
       console.log("airedDate 2: ", airedDate)
     } else if (isRelativeDate) {
         // Convert Day ("Saturday") into Date (3 days in the future, so add 3 to airedDate)
-        console.log("BEFOREHAND: ", airedText, airedDate)
-        airedDate.setDate(airedDate.getDate() + (airedDate.getDay() - relativeDateIndex))
+        console.log("BEFOREHAND: ", airedText, airedDate, airedDate.getDay(), relativeDateIndex)
+        const thisDay = airedDate.getDay()
+        const addDays = (relativeDateIndex > thisDay) ? (relativeDateIndex - thisDay) : (7 - (relativeDateIndex - thisDay))
+        airedDate.setDate(airedDate.getDate() + addDays)
         console.log("AFTER: ", airedDate)
-        // Untested, but everything else works
-        throw new Error("FORCE FAIL") // TODO - remove after confirming this works
     } else if (isFullDate) { // Example: Jul, 12 2022 || Jul 3 2022
       airedDate = new Date(`${airedText.substring(5, 11)} ${airedDate.getFullYear()}`)
       console.log("airedDate 3: ", airedDate)
@@ -259,7 +262,8 @@ const createAirDate = (airedText: string, mediaLength: string): Date => {
     console.log("timeHours 1: ", timeHours)
     console.log("timeMinutes 1: ", timeMinutes)
   
-    if (isFullDate || airedText.startsWith('Tonight') || airedText.startsWith('Tomorrow')) {
+    // TODO - move this check to a variable and find a good name for it
+    if (isFullDate || isRelativeDate || airedText.startsWith('Tonight') || airedText.startsWith('Tomorrow')) {
         console.log("airedText: ", airedText)
         // airedText Options:
             // Tonight at 6:30PM on 65.5 WLJCDT5 (This TV)
@@ -311,6 +315,7 @@ const createAirDate = (airedText: string, mediaLength: string): Date => {
     console.log("airedDate 7: ", airedDate)
     airedDate.setMilliseconds(0)
     console.log("airedDate 8: ", airedDate)
+    // TODO - IF invalid date then just error instead of causing mongo error
     return airedDate
   }
 
@@ -365,7 +370,7 @@ const grabCurrentScreenItems = async (page: any, allItems: any[], mediaType: str
     return { foundNewItem, finalItemList }
 }
 
-export const extractMediaDetails = async (page: any): Promise<void> => {
+export const extractMediaDetails = async (page: any, pin: string): Promise<void> => {
     try {
       console.log("In extractMediaDetails")
       // Verify login - login fully if not already logged in
@@ -395,15 +400,23 @@ export const extractMediaDetails = async (page: any): Promise<void> => {
             const hrefEndIndex = hrefBeginIndex + hrefPartial.indexOf(`\" role=\"link`)
             const detailsHref = currentRawData.substring(hrefBeginIndex, hrefEndIndex) //  // Grabs
             console.log("Loading Details: ", `https://app.plex.tv/desktop/${detailsHref}`)
-            if (`https://app.plex.tv/desktop/${detailsHref}` == 'https://app.plex.tv/desktop/#!/server/208c0b35cc182ee6422cf4bec739bb416aeab26b/provider/tv.plex.providers.epg.cloud%3A4/details?key=%2Ftv.plex.providers.epg.cloud%3A4%2Fmetadata%2Fplex%253A%252F%252Fmovie%252F5fc68b591a65df002dd21794')
-            {
-              console.log("**********************************")
-              console.log("THIS HAD PREVIOUSLY FAILED")
-              console.log("**********************************")
-            }
+            // if (`https://app.plex.tv/desktop/${detailsHref}` == 'https://app.plex.tv/desktop/#!/server/208c0b35cc182ee6422cf4bec739bb416aeab26b/provider/tv.plex.providers.epg.cloud%3A4/details?key=%2Ftv.plex.providers.epg.cloud%3A4%2Fmetadata%2Fplex%253A%252F%252Fmovie%252F5fc68b591a65df002dd21794')
+            // {
+            //   console.log("**********************************")
+            //   console.log("THIS HAD PREVIOUSLY FAILED")
+            //   console.log("**********************************")
+            // }
             await page.goto(`https://app.plex.tv/desktop/${detailsHref}`)
             try {
-                await page.waitForSelector('div[data-testid="preplay-mainTitle"]', { timeout: pageTimeout })
+                // TODO - are nested try catch blocks bad code? We have 3 here
+                try {
+                  await page.waitForSelector('div[data-testid="preplay-mainTitle"]', { timeout: pageTimeout })
+                } catch (err) {
+                  console.log("Details page didn't load")
+                  await authenticatePlexUser(page, pin).catch(() => console.log("Failed entering PIN"))
+                  await page.waitForSelector('div[data-testid="preplay-mainTitle"]', { timeout: pageTimeout })
+                }
+                
                 // Grab Title
                 const titleContainer = await page.$('div[data-testid="preplay-mainTitle"]')
                 // const titleSpan = await titleContainer.$('span[title]')
@@ -522,6 +535,8 @@ export const extractMediaDetails = async (page: any): Promise<void> => {
                     console.log("**********************************")
                     console.log("ENCOUNTERED AN UNEXPECTED ERROR!!!")
                     console.log("**********************************")
+                    // PIN page can appear on new tabs
+                    
                     // throw new Error("STOP THINGS")
                     // TODO - Real Error -> Add ability to save error message
                     // await updateMedia(currentItem._id, {

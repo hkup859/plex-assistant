@@ -155,8 +155,8 @@ app.get('/extractMediaDetails', async (req: express.Request, res: express.Respon
 			// slowMo: 500
 		})
 		
-		const page = await logInToPlex(browser, userLabel)
-		const response = await extractMediaDetails(page)
+		const { page, pin } = await logInToPlex(browser, userLabel)
+		const response = await extractMediaDetails(page, pin)
 		console.log("Closing browser")
 		if (browser) 
 			await browser.close().catch(() => console.log("Browser close failure. Browser was never opened."))
