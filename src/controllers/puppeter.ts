@@ -94,7 +94,7 @@ export const logInToPlex = async (browser: any, userLabel: string): Promise<any>
       await page.waitForTimeout(1000) // TODO - Wait for navigation and then check a item on the screen to ensure the right page is up.
       
       // Complete second login screen
-      await authenticatePlexUser(page, loginCredentials.pin)
+      await authenticatePlexUser(page, loginCredentials.profileUsername, loginCredentials.pin)
 
       // TODO - Add a wait for selector here. Something that identifies we are on the next page. Maybe a waitForNavigation?
       
@@ -110,10 +110,16 @@ export const logInToPlex = async (browser: any, userLabel: string): Promise<any>
     
 }
 
-const authenticatePlexUser = async (page: any, pin: string) => {
+
+const authenticatePlexUser = async (page: any, profileUsername: string, pin?: string) => {
   console.log("Selecting User Profile")
-  await page.waitForSelector('.admin-icon', {timeout: pageTimeout}) // TODO - provide more customization? Perhaps there are multiple admins or maybe even non-admins with some management rights?
-  await page.click('.admin-icon')
+  // <div class="caption"> <div class="username">bo8778</div> <div class="managed-title hidden"></div> <div class="managed-title-community hidden"></div> </div>
+  await page.waitForSelector('.admin-icon', {timeout: pageTimeout}) // There will always be an admin profile
+  const profileOptions = await page.$$('div[class="username"]')
+  console.log("profileOptions: ", profileOptions)
+  const profile = await findPropertyByTextContent(profileOptions, profileUsername)
+  await profile.click()
+  // await page.click('.admin-icon')
   // await page.waitForSelector('.pin-digit-container') // Is this redundant?
   // TODO - Any additional checks we could do to see if we are on this page? We are now using this logic when we encounter an extraction error and it would be good to KNOW that we are on this page.
   if (pin) {
@@ -331,7 +337,7 @@ export const grabAllScreenItems = async (page: any, mediaType: string): Promise<
   
     while (noNewItemsCount < 10) {
       await page.waitForTimeout(1000)
-      const { foundNewItem, finalItemList }= await grabCurrentScreenItems(page, allItems, mediaType)
+      const { foundNewItem, finalItemList } = await grabCurrentScreenItems(page, allItems, mediaType)
       allItems = allItems.concat(finalItemList)
   
       // Increment if needed
@@ -358,18 +364,28 @@ const grabCurrentScreenItems = async (page: any, allItems: any[], mediaType: str
       const item = currentItems[i]
       const outerHTMLElement = await item.getProperty('outerHTML')
       const outHTMLText = await (outerHTMLElement).jsonValue()
-      const matchingIndex = allItems.indexOf(outHTMLText)
+      
+      // Grab detailed page href
+      const hrefBeginIndex = outHTMLText.indexOf('#!/server')
+      const hrefPartial = outHTMLText.substring(hrefBeginIndex)
+      const hrefEndIndex = hrefBeginIndex + hrefPartial.indexOf(`\" role=\"link`)
+      const detailsHref = outHTMLText.substring(hrefBeginIndex, hrefEndIndex)
+      const detailsLink = `https://app.plex.tv/desktop/${detailsHref}` // TODO - Consider saving just the detailsHref or even removing the word server. This saves a small amount of storage in the DB since the beginning of the value is identical. Is this worth doing?
+      const matchingIndex = allItems.indexOf(detailsLink)
       if(matchingIndex === -1) {
-        finalItemList.push(outHTMLText)
+        console.log("Link Details: ", detailsLink)
+        finalItemList.push(detailsLink)
         foundNewItem = true
-        // Save Item - TODO -> should this be awaited? If so, what about a promise all?
+        // Save Item
+        // TODO - Maybe convert to a promise all? These don't need done in sequential order.
         // TODO - This will fail a lot, MOST items will already exist? Perhaps only print error when it's not a duplicate error?
-        await createMedia(outHTMLText, mediaType).catch(err => console.log(`Error creating media in grabCurrentScreenItems: ${err}`))
+        await createMedia(detailsLink, mediaType).catch(err => console.log(`Error creating media in grabCurrentScreenItems: ${err}`))
       } 
     }
     return { foundNewItem, finalItemList }
 }
 
+// ERROR for Invalid date is still happening and we are NOT saving error value in mongo as a result
 export const extractMediaDetails = async (page: any, pin: string): Promise<void> => {
     try {
       console.log("In extractMediaDetails")
@@ -382,7 +398,7 @@ export const extractMediaDetails = async (page: any, pin: string): Promise<void>
         const rawItemRecords = await findAllUnprocessedMedia()
         
         console.log("Looping through items")
-        const maxItems = rawItemRecords?.length <= extractMediaDetailsLimit ? rawItemRecords?.length : 25
+        const maxItems = rawItemRecords?.length <= extractMediaDetailsLimit ? rawItemRecords?.length : extractMediaDetailsLimit
         for(let i = 0; i < maxItems; i++) {
             // Maybe Mark as undefined and declare a type? Mongo gets set with these empty string values, which is not great
             let title: string | undefined = undefined
@@ -392,21 +408,15 @@ export const extractMediaDetails = async (page: any, pin: string): Promise<void>
             let genres: string[] | undefined = undefined, resolution: string | undefined = undefined, airData: any | undefined = undefined, extraDatas: any | undefined = undefined
 
             const currentItem = rawItemRecords[i]
-            const currentRawData = currentItem.rawData
-            
-            // Grab detailed page href
-            const hrefBeginIndex = currentRawData.indexOf('#!/server')
-            const hrefPartial = currentRawData.substring(hrefBeginIndex)
-            const hrefEndIndex = hrefBeginIndex + hrefPartial.indexOf(`\" role=\"link`)
-            const detailsHref = currentRawData.substring(hrefBeginIndex, hrefEndIndex) //  // Grabs
-            console.log("Loading Details: ", `https://app.plex.tv/desktop/${detailsHref}`)
+            const currentDetailsLink = currentItem.detailsLink
+            console.log("Loading Details: ", currentDetailsLink)
             // if (`https://app.plex.tv/desktop/${detailsHref}` == 'https://app.plex.tv/desktop/#!/server/208c0b35cc182ee6422cf4bec739bb416aeab26b/provider/tv.plex.providers.epg.cloud%3A4/details?key=%2Ftv.plex.providers.epg.cloud%3A4%2Fmetadata%2Fplex%253A%252F%252Fmovie%252F5fc68b591a65df002dd21794')
             // {
             //   console.log("**********************************")
             //   console.log("THIS HAD PREVIOUSLY FAILED")
             //   console.log("**********************************")
             // }
-            await page.goto(`https://app.plex.tv/desktop/${detailsHref}`)
+            await page.goto(currentDetailsLink)
             try {
                 // TODO - are nested try catch blocks bad code? We have 3 here
                 try {

@@ -1,5 +1,6 @@
 import fs from 'fs'  
 import dotenv from 'dotenv'
+const AuthenticationModel = require('../models/authentication')
 
 // Allow pulling ENV variable from .env file
 dotenv.config()
@@ -29,13 +30,14 @@ const decrypt = (encryptedData: any): string => {
 }
 
 // Access Logins
-export const saveLogin = async (label: string, email: string, password: string, pin: string): Promise<string> => {
+export const saveLogin = async (label: string, email: string, password: string, pin?: string, profileUsername?: string): Promise<string> => {
   console.log("In saveLogin")
   try {
     const encryptedLogin = {
       email: encrypt(email),
       password: encrypt(password),
-      pin: pin ? encrypt(pin) : undefined
+      pin: pin ? encrypt(pin) : undefined,
+      profileUsername: profileUsername ? encrypt(profileUsername) : undefined,
     }
 
     // TODO - check for file first and provide error or something
@@ -60,11 +62,33 @@ export const retrieveLogin = async (label: string): Promise<any> => { // Add aut
     const decryptedLogin = {
       email: decrypt(parsedLogin.email),
       password: decrypt(parsedLogin.password),
-      pin: parsedLogin.pin ? decrypt(parsedLogin.pin) : undefined
+      pin: parsedLogin.pin ? decrypt(parsedLogin.pin) : undefined,
+      profileUsername: parsedLogin.profileUsername ? decrypt(parsedLogin.profileUsername) : undefined,
     }
     return decryptedLogin
   } catch(err) {
     console.log("Failed to retrieve login. It may not exist")
     throw new Error(`Failed to retrieve login. It may not exist. Raw Error: ${err}`)
   }
+}
+
+export const createAuthentication = async (email: string, password: string, pin?: string, profileUsername?: string): Promise<any> => {
+  console.log("In priority controller createAuthentication")
+  const encryptedLogin = {
+    email: encrypt(email),
+    password: encrypt(password),
+    pin: pin ? encrypt(pin) : undefined,
+    profileUsername: profileUsername ? encrypt(profileUsername) : undefined,
+  }
+  return AuthenticationModel.createAuthentication(encryptedLogin)
+}
+
+// export const updateAuthentication = async (_id, priorityUpdateObject): Promise<any> => {
+//   console.log("In priority controller updateAuthentication")
+//   return AuthenticationModel.updateAuthentication(_id, priorityUpdateObject)
+// }
+
+export const findAuthenticationByEmail = async (email: string) => {
+  // TODO - encrypto email
+  return AuthenticationModel.findAuthenticationByEmail(encrypt(email))
 }

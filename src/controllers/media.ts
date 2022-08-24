@@ -12,13 +12,13 @@ const MediaModel = require('../models/media')// ({ mongoose: mongoose })
 //     return "YAY"
 // }
 
-export const createMedia = async (rawData, mediaType): Promise<any> => {
+export const createMedia = async (detailsLink, mediaType): Promise<any> => {
     console.log("In media controller createMedia")
-    return MediaModel.createMedia({ rawData, mediaType }) // Does this need await?
+    return MediaModel.createMedia({ detailsLink, mediaType }) // Does this need await?
 }
 
 export const updateMedia = async (_id, mediaUpdateObject): Promise<any> => {
-    console.log("In media controller createMedia")
+    console.log("In media controller updateMedia")
     return MediaModel.updateMedia(_id, mediaUpdateObject) // Does this need await?
 }
 

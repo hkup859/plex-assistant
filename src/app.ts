@@ -8,6 +8,7 @@ import { findAllUnprocessedMedia } from './controllers/media'
 import { logInToPlex, navigateToLiveTVPage, selectMediaType, extractMediaDetails, grabAllScreenItems } from './controllers/puppeter'
 import { saveLogin, retrieveLogin } from './controllers/authentication'
 import { testMedia } from './models/media'
+import { createPriority } from './controllers/priority'
 
 // Allow pulling ENV variable from .env file
 dotenv.config()
@@ -69,7 +70,7 @@ app.post('/retrieveLogin', async (req: express.Request, res: express.Response) =
 	console.log("In retrieveLogin")
 	try {
 		// Pull variables from query
-		const {label }: {label: string} = req.body
+		const { label }: {label: string} = req.body
 		const response = await retrieveLogin(label)
 		return res.status(200).json(response)
 	} catch(err) {
@@ -103,7 +104,7 @@ app.get('/pullRawData', async (req: express.Request, res: express.Response) => {
 		})
 
 		// Get Data
-		let page = await logInToPlex(browser, userLabel)
+		let { page } = await logInToPlex(browser, userLabel)
 		page = await navigateToLiveTVPage(page)
 		page = await selectMediaType(page, mediaType)
 		await grabAllScreenItems(page, mediaType)
@@ -122,7 +123,7 @@ app.get('/pullRawData', async (req: express.Request, res: express.Response) => {
 	
 })
 
-// Grabs records with only rawData
+// Grabs records with only detailsLink
 app.get('/retrieveUnprocessedMedia', async (req: express.Request, res: express.Response) => {
 	console.log("In retrieveRawData")
 	try {
@@ -141,7 +142,7 @@ app.get('/retrieveUnprocessedMedia', async (req: express.Request, res: express.R
 	}
 })
 
-// Processes all records with only rawData
+// Processes all records with only detailsLink
 app.get('/extractMediaDetails', async (req: express.Request, res: express.Response) => {
 	console.log("In extractMediaDetails")
 	let browser
@@ -168,6 +169,17 @@ app.get('/extractMediaDetails', async (req: express.Request, res: express.Respon
 		if (browser) 
 			await browser.close().catch(() => console.log("Browser close failure. Browser was never opened."))
 		return res.status(500).json(`saveLogin failed: ${err}`)
+	}
+})
+
+// 
+app.post('/createPriority', async (req: express.Request, res: express.Response) => {
+	try {
+		const { title, mediaType, shouldRecord, year, lastAired }: { title: string, mediaType: string, shouldRecord: boolean, year: string, lastAired: Date } = req.body
+		const response = await createPriority(title, mediaType, shouldRecord, year, lastAired)
+		return res.status(200).json(response)
+	} catch(err) {
+		return res.status(500).json(`createPriority failed: ${err}`)
 	}
 })
 
