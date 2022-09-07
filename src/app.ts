@@ -58,8 +58,8 @@ app.post('/saveLogin', async (req: express.Request, res: express.Response) => {
 	console.log("In saveLogin")
 	try {
 		// Pull variables from query
-		const {label, email, password, pin }: {label: string, email: string, password: string, pin: string} = req.body
-		const response = await saveLogin(label, email, password, pin)
+		const {label, email, password, pin, profileUsername }: {label: string, email: string, password: string, pin: string, profileUsername: string} = req.body
+		const response = await saveLogin(label, email, password, pin, profileUsername)
 		return res.status(200).json(response)
 	} catch(err) {
 		return res.status(500).json(`saveLogin failed: ${err}`)
@@ -125,7 +125,7 @@ app.get('/pullRawData', async (req: express.Request, res: express.Response) => {
 
 // Grabs records with only detailsLink
 app.get('/retrieveUnprocessedMedia', async (req: express.Request, res: express.Response) => {
-	console.log("In retrieveRawData")
+	console.log("In retrieveUnprocessedMedia")
 	try {
 		// Pull variables from query
 		// TODO - object desctructing?

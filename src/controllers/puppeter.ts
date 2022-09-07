@@ -116,7 +116,6 @@ const authenticatePlexUser = async (page: any, profileUsername: string, pin?: st
   // <div class="caption"> <div class="username">bo8778</div> <div class="managed-title hidden"></div> <div class="managed-title-community hidden"></div> </div>
   await page.waitForSelector('.admin-icon', {timeout: pageTimeout}) // There will always be an admin profile
   const profileOptions = await page.$$('div[class="username"]')
-  console.log("profileOptions: ", profileOptions)
   const profile = await findPropertyByTextContent(profileOptions, profileUsername)
   await profile.click()
   // await page.click('.admin-icon')
@@ -188,10 +187,10 @@ const findPropertyByTextContent = async (properties: any, searchText: any, match
     for(let i = 0; i < properties.length; i++) {
       const property = properties[i]
       const propertyTextContent = await getTextContent(property)
+      // console.log("searchText: ", searchText)
+      // console.log("propertyTextContent: ", propertyTextContent)
       if (Array.isArray(searchText)) {
         if (matchAll) {
-          console.log("searchText: ", searchText)
-          console.log("propertyTextContent: ", propertyTextContent)
           let fullMatch = true
           for (let k = 0; k < searchText.length; k++) {
             if (!propertyTextContent.includes(searchText[k])) {
