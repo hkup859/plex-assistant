@@ -1,6 +1,6 @@
 {
     "name": "plex-assistant",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "dependencies": {
         "axios": "*",
         "express": "^4.17.1",

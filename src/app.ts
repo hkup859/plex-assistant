@@ -2,11 +2,9 @@ import express from 'express'
 import puppeteer from 'puppeteer'
 import bodyParser from 'body-parser'
 import dotenv from 'dotenv'
-// import { logInToPlex, navigateToLiveTVPage, grabAndSaveScreenItems, selectMediaType, saveLogin, retrieveLogin, retrieveRawItems, extractMediaDetails } from './controllers/rawdata'
-// import { test } from './controllers/media'
 import { findAllUnprocessedMedia } from './controllers/media'
 import { logInToPlex, navigateToLiveTVPage, selectMediaType, extractMediaDetails, grabAllScreenItems } from './controllers/puppeter'
-import { saveLogin, retrieveLogin } from './controllers/authentication'
+import { createAuthentication, findAuthenticationByEmail } from './controllers/authentication'
 import { testMedia } from './models/media'
 import { createPriority } from './controllers/priority'
 
@@ -23,14 +21,6 @@ app.use(bodyParser.urlencoded())
 
 // parse application/json
 app.use(bodyParser.json())
-
-
-// app.get('/', (req: express.Request, res: express.Response) => {
-// 	res.json({
-// 		message: 'Hello world',
-// 	})
-// })
-
 
 // TODO - Figure out a better way to handle this. Also try to upgrade typescript to v4.0.0 or higher.
 // interface ApiError {
@@ -59,8 +49,8 @@ app.post('/saveLogin', async (req: express.Request, res: express.Response) => {
 	console.log("In saveLogin")
 	try {
 		// Pull variables from query
-		const {label, email, password, pin, profileUsername }: {label: string, email: string, password: string, pin: string, profileUsername: string} = req.body
-		const response = await saveLogin(label, email, password, pin, profileUsername)
+		const {email, password, pin, profileUsername }: {email: string, password: string, pin: string, profileUsername: string} = req.body
+		const response = await createAuthentication(email, password, pin, profileUsername)
 		return res.status(200).json(response)
 	} catch(err) {
 		return res.status(500).json(`saveLogin failed: ${err}`)
@@ -71,8 +61,8 @@ app.post('/retrieveLogin', async (req: express.Request, res: express.Response) =
 	console.log("In retrieveLogin")
 	try {
 		// Pull variables from query
-		const { label }: {label: string} = req.body
-		const response = await retrieveLogin(label)
+		const { email }: {email: string} = req.body
+		const response = await findAuthenticationByEmail(email)
 		return res.status(200).json(response)
 	} catch(err) {
 		return res.status(500).json(`retrieveLogin failed: ${err}`)
@@ -88,7 +78,7 @@ app.get('/pullRawData', async (req: express.Request, res: express.Response) => {
 		// TODO - object desctructing?
 		const mediaType: string = req.query?.mediaType as string // TODO - use enum type
 		const headless: boolean = (req.query?.headless as string) !== 'false' // TODO - use enum type
-		const userLabel: string = req.query?.userLabel as string
+		const email: string = req.query?.email as string
 
 		if (!mediaType) {
 			return res.status(500).json("mediaType is a required field")
@@ -105,7 +95,7 @@ app.get('/pullRawData', async (req: express.Request, res: express.Response) => {
 		})
 
 		// Get Data
-		let { page } = await logInToPlex(browser, userLabel)
+		let { page } = await logInToPlex(browser, email)
 		page = await navigateToLiveTVPage(page)
 		page = await selectMediaType(page, mediaType)
 		await grabAllScreenItems(page, mediaType)
@@ -149,7 +139,7 @@ app.get('/extractMediaDetails', async (req: express.Request, res: express.Respon
 	let browser
 	try {
 		const headless: boolean = (req.query?.headless as string) !== 'false' // TODO - use enum type
-		const userLabel: string = req.query?.userLabel as string
+		const email: string = req.query?.email as string
 		browser = await puppeteer.launch({
 			headless,
 			// args: ['--start-fullscreen'],
@@ -157,14 +147,13 @@ app.get('/extractMediaDetails', async (req: express.Request, res: express.Respon
 			// slowMo: 500
 		})
 		
-		const { page, pin } = await logInToPlex(browser, userLabel)
-		const response = await extractMediaDetails(page, pin)
+		const { page, pin } = await logInToPlex(browser, email)
+		await extractMediaDetails(page, pin)
 		console.log("Closing browser")
 		if (browser) 
 			await browser.close().catch(() => console.log("Browser close failure. Browser was never opened."))
 		
-		// const response = await saveLogin(label, email, password, pin)
-		return res.status(200).json(response)
+		return res.status(200).json('success')
 	} catch(err) {
 		console.log("Closing browser")
 		if (browser) 
@@ -183,19 +172,6 @@ app.post('/createPriority', async (req: express.Request, res: express.Response) 
 		return res.status(500).json(`createPriority failed: ${err}`)
 	}
 })
-
-//Get Mongo/Mongoose Connected
-// process.env[
-	// "mongo": {
-    //     "uri": "mongodb://localhost:27017/freds",
-    //     "options": {
-    //         "auto_reconnect": false,
-    //         "keepAlive": 1,
-    //         "connectTimeoutMS": 30000,
-    //         "useNewUrlParser": true,
-    //         "useUnifiedTopology": true
-    //     }
-    // }
 var mongoose = require('mongoose');
 var mongoUri = `mongodb://root:${MONGO_PASSWORD}@mongodb_container:27017/plex-assistant?authSource=admin`
 var mongoOptions = {
