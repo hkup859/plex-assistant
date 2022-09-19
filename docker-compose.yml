@@ -1,7 +1,18 @@
 version: '3.7'
 
 services:
-  ts-node-docker:
+  mongodb_container:
+    image: mongo:latest
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: "root"
+      MONGO_INITDB_ROOT_PASSWORD: "${MONGO_PASSWORD}"
+    ports:
+      - 27017:27017
+    volumes:
+      - mongodb_data_container:/data/db
+  plex-assistant:
+    depends_on:
+      - mongodb_container
     build:
       context: .
       dockerfile: Dockerfile
@@ -9,9 +20,13 @@ services:
     volumes:
       - ./src:/home/node/app/src
       - ./nodemon.json:/home/node/app/nodemon.json
-    container_name: ts-node-docker
+    container_name: plex-assistant
     expose:
       - '3000'
     ports:
       - '3000:3000'
     command: npm run dev
+    depends_on:
+      - mongodb_container
+volumes:
+  mongodb_data_container:

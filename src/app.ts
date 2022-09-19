@@ -15,6 +15,7 @@ dotenv.config()
 
 const app = express()
 const port = process.env['PORT']
+const { MONGO_PASSWORD } = process.env
 
 // TODO - Unneeded?
 // parse application/x-www-form-urlencoded
@@ -196,7 +197,7 @@ app.post('/createPriority', async (req: express.Request, res: express.Response) 
     //     }
     // }
 var mongoose = require('mongoose');
-var mongoUri = 'mongodb://localhost:27017/plex-assistant' // config.get('mongo.uri');
+var mongoUri = `mongodb://root:${MONGO_PASSWORD}@mongodb_container:27017/plex-assistant?authSource=admin`
 var mongoOptions = {
 	// "auto_reconnect": false,
 	"keepAlive": 1,
@@ -239,20 +240,10 @@ var initMongo = (callback) => {
 	mongoose.connect(mongoUri, mongoOptions);
 };
 
-// var server = app.listen(port, function() {
-// 	initMongo(function () {
-// 		var host = server.address().address;
-// 		var port = server.address().port;
-// 		logger.info("We are listening on http://%s:%s", host, port);
-// 	})
-// });
-
 app.listen(port, () => {
 	initMongo(() => {
 		console.log("Mongo Callback Finished")
 		console.log(`plex-assistant server listening on port ${port}!`)
 	})
-	// console.log(`plex-assistant server listening on port ${port}!`)
 	}
 )
-// 
