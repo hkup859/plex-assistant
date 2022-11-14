@@ -1,0 +1,53 @@
+{
+  "name": "react-docker",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@emotion/react": "^11.10.4",
+    "@emotion/styled": "^11.10.4",
+    "@mui/material": "^5.10.6",
+    "@mui/x-data-grid": "^5.10.6",
+    "@testing-library/jest-dom": "^5.11.6",
+    "@testing-library/react": "^11.2.2",
+    "@vitejs/plugin-react": "^2.0.1",
+    "axios": "^0.27.2",
+    "history": "^4.9.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "react-router-config": "^5.1.1",
+    "react-router-dom": "^5.1.2",
+    "vite": "^3.0.7"
+  },
+  "devDependencies": {
+    "@types/react": "^17.0.20",
+    "@types/react-dom": "^17.0.9",
+    "@types/react-router-dom": "^5.1.8",
+    "dotenv-cli": "^4.0.0",
+    "typescript": "^3.8.3"
+  },
+  "scripts": {
+    "start": "vite --host",
+    "vite:start": "vite --host",
+    "build": "VITE_VERSION=$npm_package_version vite build",
+    "build:visualize": "VIS=true npm build",
+    "preview": "vite preview --host"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}
