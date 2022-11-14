@@ -2,11 +2,13 @@ import express from 'express'
 import puppeteer from 'puppeteer'
 import bodyParser from 'body-parser'
 import dotenv from 'dotenv'
-import { findAllUnprocessedMedia } from './controllers/media'
+import { findAllUnprocessedMedia, findMedia } from './controllers/media'
 import { logInToPlex, navigateToLiveTVPage, selectMediaType, extractMediaDetails, grabAllScreenItems } from './controllers/puppeter'
-import { createAuthentication, findAuthenticationByEmail } from './controllers/authentication'
+// import { createAuthentication, findAuthenticationByEmail } from './controllers/authentication'
+import { createAuthentication } from './controllers/authentication'
 import { testMedia } from './models/media'
 import { createPriority } from './controllers/priority'
+// import { Router } from 'express'
 
 // Allow pulling ENV variable from .env file
 dotenv.config()
@@ -22,6 +24,15 @@ app.use(bodyParser.urlencoded())
 // parse application/json
 app.use(bodyParser.json())
 
+app.use(function(_req: express.Request, res: express.Response, next: express.NextFunction) {
+	res.header("Access-Control-Allow-Origin", "*") // TODO - THIS IS INSECURE!
+
+	// res.header("Access-Control-Allow-Origin", "http://localhost:3000") // Only works on the exact machine running docker
+	res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept")
+	next();
+  });
+  
+
 // TODO - Figure out a better way to handle this. Also try to upgrade typescript to v4.0.0 or higher.
 // interface ApiError {
 // 	code: number;
@@ -31,8 +42,8 @@ app.use(bodyParser.json())
 // const isApiError = (x: any): x is ApiError => {
 // return typeof x.code === 'number';
 // };
-
-app.post('/testRoute', async (req: express.Request, res: express.Response) => {
+// const router = Router()
+app.get('/testRoute', async (req: express.Request, res: express.Response) => {
 	console.log("In testRoute")
 	try {
 		// Pull variables from query
@@ -57,17 +68,18 @@ app.post('/saveLogin', async (req: express.Request, res: express.Response) => {
 	}
 })
 
-app.post('/retrieveLogin', async (req: express.Request, res: express.Response) => {
-	console.log("In retrieveLogin")
-	try {
-		// Pull variables from query
-		const { email }: {email: string} = req.body
-		const response = await findAuthenticationByEmail(email)
-		return res.status(200).json(response)
-	} catch(err) {
-		return res.status(500).json(`retrieveLogin failed: ${err}`)
-	}
-})
+// Disabled for security until API authentication is implemented
+// app.post('/retrieveLogin', async (req: express.Request, res: express.Response) => {
+// 	console.log("In retrieveLogin")
+// 	try {
+// 		// Pull variables from query
+// 		const { email }: {email: string} = req.body
+// 		const response = await findAuthenticationByEmail(email)
+// 		return res.status(200).json(response)
+// 	} catch(err) {
+// 		return res.status(500).json(`retrieveLogin failed: ${err}`)
+// 	}
+// })
 
 // Grabs the data from plex
 app.get('/pullRawData', async (req: express.Request, res: express.Response) => {
@@ -170,6 +182,18 @@ app.post('/createPriority', async (req: express.Request, res: express.Response) 
 		return res.status(200).json(response)
 	} catch(err) {
 		return res.status(500).json(`createPriority failed: ${err}`)
+	}
+})
+
+// Pull back media stored in the database
+app.post('/findMedia', async (req: express.Request, res: express.Response) => {
+	try {
+		const { searchCriteria }: { searchCriteria: any } = req.body
+		console.log("First searchCriteria: ", searchCriteria)
+		const response = await findMedia(searchCriteria)
+		return res.status(200).json(response)
+	} catch(err) {
+		return res.status(500).json(`findMedia failed: ${err}`)
 	}
 })
 var mongoose = require('mongoose');

@@ -11,6 +11,7 @@ export const updateMedia = async (_id, mediaUpdateObject): Promise<any> => {
 }
 
 export const findMedia = async (searchCriteria) => {
+    console.log("searchCriteria: ", searchCriteria)
     return MediaModel.findMedia(searchCriteria)
 }
 

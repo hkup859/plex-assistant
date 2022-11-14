@@ -22,11 +22,24 @@ services:
       - ./nodemon.json:/home/node/app/nodemon.json
     container_name: plex-assistant
     expose:
+      - '4000'
+    ports:
+      - '4000:4000'
+    command: npm run dev
+  react-app:
+    depends_on:
+      - plex-assistant
+    build:
+      context: ./react-app
+      dockerfile: Dockerfile
+    volumes:
+      - /app/node_modules
+      - ./react-app:/app
+    container_name: react-app
+    expose:
       - '3000'
     ports:
       - '3000:3000'
-    command: npm run dev
-    depends_on:
-      - mongodb_container
+    command: npm run vite:start
 volumes:
   mongodb_data_container:

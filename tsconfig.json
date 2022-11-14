@@ -40,5 +40,7 @@
    
     /* Completeness */
     "skipLibCheck": true                                 /* Skip type checking all .d.ts files. */
-  }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["react-app", "node_modules"]
 }
