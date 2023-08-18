@@ -1,6 +1,6 @@
 # Overview
 
-### NOTE: This program is a WORK IN PROGRESS and is NOT in an MVP state yet.
+### NOTE: This project has been stopped as I switched to Jellyfin. I may end up porting some of this functionality over to Jellyfin.
 
 ### Project Goal
 The program is designed to be able to assist with admin functionality in plex. This initial goal is to allow a better way to manage recording Live TV content from a TV antenna. Currently it is very cumbersome to navigate through Movies & TV shows on a daily or weekly basis only to find the handful of items that should be recorded. The primary objective is to improve that, with future goals being: email lists of new upcoming content, allow reordering DVR priority (difficult when you have many items), verifying content is being recorded properly (detecting any silent bugs from Plex), and possibly predicting what content you like.
